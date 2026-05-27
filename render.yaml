@@ -1,0 +1,24 @@
+services:
+  - type: cron
+    name: ims-data-fetcher
+    runtime: python
+    schedule: "0 6 * * *"  # Runs daily at 6:00 AM UTC — adjust as needed
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m src.main --from-date $(date -d 'yesterday' '+%Y/%m/%d') --to-date $(date '+%Y/%m/%d') --export console
+    envVars:
+      - key: IMS_LOGIN_URL
+        sync: false  # Set manually in Render dashboard
+      - key: IMS_USERNAME
+        sync: false
+      - key: IMS_PASSWORD
+        sync: false
+      - key: IMS_PAGE_SIZE
+        value: "50"
+      - key: IMS_DATE_FORMAT
+        value: "yyyy/MM/dd"
+      - key: IMS_EXPORT_FORMATS
+        value: "console"
+      - key: IMS_MYSQL_ENABLED
+        value: "false"
+      - key: PYTHON_VERSION
+        value: "3.11.6"

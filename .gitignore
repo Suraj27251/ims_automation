@@ -1,0 +1,27 @@
+# Credentials - NEVER commit
+.env
+
+# Virtual environment
+venv/
+.venv/
+
+# Output files
+output/
+logs/
+diagnostics/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
