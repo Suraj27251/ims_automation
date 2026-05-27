@@ -97,57 +97,43 @@ class IMSAuth:
                 form_action,
                 data=payload,
                 timeout=self.timeout,
-                allow_redirects=True,
+                allow_redirects=False,  # Don't follow redirects - just capture cookies
             )
         except requests.RequestException as e:
             raise AuthError(f"Login POST failed: {e}") from e
 
-        # Log redirect chain
-        if post_resp.history:
-            logger.info("Login redirect chain:")
-            for r in post_resp.history:
-                logger.info("  %d -> %s", r.status_code, r.headers.get("Location", "?"))
-            logger.info("  Final: %d %s", post_resp.status_code, post_resp.url)
-        else:
-            logger.info("Login response: status=%d, url=%s", post_resp.status_code, post_resp.url)
-
-        # --- Debug: cookies after login ---
+        # Log response
+        logger.info(
+            "Login POST response: status=%d, location=%s",
+            post_resp.status_code,
+            post_resp.headers.get("Location", "N/A"),
+        )
         logger.info("Cookies AFTER login: %s", self._cookie_summary())
 
         # Step 3: Validate login success
-        self._validate_login(post_resp, login_url)
-        logger.info("Authentication successful")
+        # A 302 redirect away from login page = success
+        if post_resp.status_code in (301, 302, 303, 307, 308):
+            location = post_resp.headers.get("Location", "")
+            # If redirecting back to /Admin itself, login failed
+            if location.rstrip("/").lower().endswith("/admin"):
+                error_msg = ""
+                raise AuthError(f"Login failed: redirected back to login page.{' ' + error_msg if error_msg else ''}")
+            logger.info("Login successful (redirected to: %s)", location)
+            return
 
-    def _validate_login(self, response: requests.Response, login_url: str) -> None:
-        """Check if login succeeded.
+        # If 200, check if login page was re-rendered (failure)
+        if post_resp.status_code == 200:
+            text_lower = (post_resp.text or "").lower()
+            if 'type="password"' in text_lower:
+                error_msg = self._extract_error_message(post_resp.text)
+                if error_msg:
+                    raise AuthError(f"Login failed: {error_msg}")
+                raise AuthError("Login failed: login form re-rendered. Check credentials.")
+            # 200 without password field might be dashboard rendered inline
+            logger.info("Login returned 200 (possibly inline dashboard)")
+            return
 
-        Success indicators:
-        - Final URL is NOT the login page (redirected to dashboard)
-        - Response does not contain login form fields
-
-        Raises:
-            AuthError: If login appears to have failed.
-        """
-        final_url = response.url or ""
-
-        # If we ended up back at the login page, login failed
-        if final_url.rstrip("/").lower() == login_url.rstrip("/").lower():
-            # Check for error message in the page
-            error_msg = self._extract_error_message(response.text)
-            if error_msg:
-                raise AuthError(f"Login failed: {error_msg}")
-            raise AuthError(
-                "Login failed: ended up back at login page. "
-                "Check credentials or form field names."
-            )
-
-        # If response still has password field, login page was re-rendered
-        text_lower = (response.text or "").lower()
-        if 'type="password"' in text_lower and "__viewstate" in text_lower:
-            error_msg = self._extract_error_message(response.text)
-            if error_msg:
-                raise AuthError(f"Login failed: {error_msg}")
-            raise AuthError("Login failed: login form re-rendered (HTTP 200).")
+        raise AuthError(f"Login returned unexpected status: {post_resp.status_code}")
 
     def _extract_hidden_fields(self, html: str) -> dict:
         """Extract all hidden input fields from HTML."""
