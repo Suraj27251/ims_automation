@@ -2,24 +2,47 @@
 
 ## Overview
 
-This guide walks you through deploying the IMS Data Fetcher on a cPanel shared hosting server. The application logs into the **XIMS (Internet Management System)** panel at `ims.marvellousfiber.com/Admin`, fetches upcoming renewal data, and exports it to CSV (and optionally MySQL).
+This guide deploys the IMS Data Fetcher using **cPanel's "Setup Python App"** feature. Credentials and configuration are stored as **environment variables in the Python App settings** — no `.env` file needed on the server.
+
+**Target**: XIMS (Internet Management System) at `https://ims.marvellousfiber.com/Admin`
 
 ---
 
-## What You Need Before Starting
+## Prerequisites
 
 | Requirement | Details |
 |-------------|---------|
-| cPanel hosting | With SSH access or Terminal feature |
-| Python 3.9+ | Most cPanel hosts have this pre-installed |
+| cPanel hosting | With "Setup Python App" feature available |
+| Python 3.9+ | Selected during app setup |
+| SSH or Terminal access | For initial setup and testing |
 | XIMS credentials | Username: `countrylink`, Password: your admin password |
-| Outbound HTTPS | Server must be able to reach `ims.marvellousfiber.com` |
+| Outbound HTTPS | Server must reach `ims.marvellousfiber.com` |
 
 ---
 
-## Step 1: Prepare Files for Upload
+## Step 1: Create Python App in cPanel
 
-On your local machine, gather these files/folders to upload:
+1. Log into **cPanel**
+2. Go to **Software** → **Setup Python App**
+3. Click **+ Create Application**
+4. Fill in:
+
+| Field | Value |
+|-------|-------|
+| Python version | `3.9` (or highest available) |
+| Application root | `ims_automation` |
+| Application URL | (leave blank — this is a CLI app, not a web app) |
+| Application startup file | `passenger_wsgi.py` (we'll create a dummy one) |
+
+5. Click **Create**
+
+> **Note**: cPanel requires a startup file even for non-web apps. We'll create a placeholder.
+
+---
+
+## Step 2: Upload Project Files
+
+Upload these files to `/home/YOUR_USERNAME/ims_automation/`:
 
 ```
 ims_automation/
@@ -34,260 +57,226 @@ ims_automation/
 │   ├── data_exporter.py
 │   ├── diagnostics.py
 │   └── main.py
-├── .env                    ← Credentials file (REQUIRED)
-├── .env.example            ← Template reference
 ├── requirements.txt        ← Python dependencies (REQUIRED)
 ├── run_fetcher.sh          ← Cron runner script (REQUIRED)
-├── setup_cpanel.sh         ← One-time setup script (REQUIRED)
-└── pyproject.toml          ← Project config
+├── setup_cpanel.sh         ← Setup helper (REQUIRED)
+└── passenger_wsgi.py       ← Dummy file for cPanel (REQUIRED)
 ```
 
-**DO NOT upload these** (they are not needed on the server):
-- `venv/` or `.venv/` (virtual environment — will be created on server)
-- `tests/` (test files)
-- `.pytest_cache/`
-- `.hypothesis/`
-- `.kiro/`
-- `render.yaml`
-- `runtime.txt`
+**DO NOT upload**: `venv/`, `.venv/`, `tests/`, `.pytest_cache/`, `.hypothesis/`, `.kiro/`, `.env`
+
+### Upload Methods
+
+- **cPanel File Manager**: Navigate to `ims_automation/`, upload files
+- **SFTP**: Use FileZilla/WinSCP to upload to `/home/YOUR_USERNAME/ims_automation/`
+- **Git**: `cd ~ && git clone YOUR_REPO_URL ims_automation`
 
 ---
 
-## Step 2: Upload to cPanel
+## Step 3: Create the Dummy Startup File
 
-### Option A: Using cPanel File Manager
+Since cPanel Python App requires a WSGI file, create a placeholder:
 
-1. Log into cPanel
-2. Open **File Manager**
-3. Navigate to your home directory (`/home/your_username/`)
-4. Create a new folder called `ims_automation`
-5. Open that folder
-6. Click **Upload** and upload all the files listed above
-7. For the `src/` folder: create it first, then upload files inside it
+**Via cPanel File Manager** — create `passenger_wsgi.py` in `ims_automation/` with this content:
 
-### Option B: Using SFTP (Recommended)
+```python
+# Placeholder for cPanel Python App requirement
+# This app runs as a CLI cron job, not a web server
+def application(environ, start_response):
+    start_response('200 OK', [('Content-Type', 'text/plain')])
+    return [b'IMS Data Fetcher - CLI application. Use cron jobs to run.']
+```
 
-Use FileZilla or WinSCP:
-- Host: your server hostname
-- Port: 21 (FTP) or the SSH port for SFTP
-- Username: your cPanel username
-- Password: your cPanel password
-
-Upload the entire `ims_automation/` folder to `/home/your_username/`
-
-### Option C: Using Git (if available)
-
+Or via SSH:
 ```bash
-cd ~
-git clone https://your-repo-url.git ims_automation
+cd ~/ims_automation
+cat > passenger_wsgi.py << 'EOF'
+def application(environ, start_response):
+    start_response('200 OK', [('Content-Type', 'text/plain')])
+    return [b'IMS Data Fetcher - CLI application. Use cron jobs to run.']
+EOF
 ```
 
 ---
 
-## Step 3: SSH into Your Server
+## Step 4: Set Environment Variables in Python App
 
-### Option A: cPanel Terminal
+This is where you put your credentials — **no `.env` file needed**.
 
-1. Log into cPanel
-2. Scroll down to **Advanced** section
-3. Click **Terminal**
-4. You're now in a shell
+1. Go to **cPanel** → **Setup Python App**
+2. Click the **pencil icon** (edit) on your `ims_automation` app
+3. Scroll down to **Environment variables** section
+4. Add each variable by clicking **Add Variable**:
 
-### Option B: SSH Client (PuTTY / Windows Terminal)
+### Required Variables
 
-```bash
-ssh your_username@your-server-hostname -p 22
-```
+| Name | Value |
+|------|-------|
+| `IMS_LOGIN_URL` | `https://ims.marvellousfiber.com/Admin` |
+| `IMS_USERNAME` | `countrylink` |
+| `IMS_PASSWORD` | `your_actual_password` |
+
+### Optional Variables (recommended)
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `IMS_PAGE_SIZE` | `50` | Records per API page |
+| `IMS_DATE_FORMAT` | `yyyy/MM/dd` | Date format for API |
+| `IMS_RETRY_COUNT` | `2` | Retry attempts on failure |
+| `IMS_CONN_TIMEOUT` | `30` | Connection timeout (seconds) |
+| `IMS_READ_TIMEOUT` | `60` | Read timeout (seconds) |
+| `IMS_EXPORT_FORMATS` | `csv` | Export type: console, csv, mysql |
+| `IMS_FILE_LOGGING` | `true` | Enable log files |
+| `IMS_DEBUG` | `false` | Debug mode (set true for troubleshooting) |
+| `IMS_DIAGNOSTIC` | `false` | Save raw HTTP data |
+| `IMS_MYSQL_ENABLED` | `false` | Enable MySQL export |
+
+### MySQL Variables (only if using database export)
+
+| Name | Value |
+|------|-------|
+| `IMS_MYSQL_HOST` | `localhost` |
+| `IMS_MYSQL_PORT` | `3306` |
+| `IMS_MYSQL_DB` | `YOUR_USERNAME_ims` |
+| `IMS_MYSQL_USER` | `YOUR_USERNAME_imsuser` |
+| `IMS_MYSQL_PASSWORD` | `your_db_password` |
+
+5. Click **Save** (or **Update**) after adding all variables
 
 ---
 
-## Step 4: Run the Setup Script
+## Step 5: Install Dependencies
+
+### Option A: Via cPanel Python App Interface
+
+1. In the Python App edit screen, scroll to **Configuration files**
+2. Enter `requirements.txt` in the field
+3. Click **Run Pip Install**
+
+### Option B: Via SSH/Terminal
 
 ```bash
 cd ~/ims_automation
-chmod +x setup_cpanel.sh
-./setup_cpanel.sh
-```
 
-**What this does:**
-- Creates a Python virtual environment (`venv/`)
-- Installs all required packages (requests, beautifulsoup4, python-dotenv, PyMySQL)
-- Creates `logs/`, `output/`, `diagnostics/` directories
-- Sets file permissions (makes `.env` readable only by you)
+# Enter the virtual environment created by cPanel Python App
+source /home/YOUR_USERNAME/virtualenv/ims_automation/3.9/bin/activate
+# OR (depending on your cPanel version):
+source /home/YOUR_USERNAME/ims_automation/venv/bin/activate
 
-### If you get "python3: command not found"
+# Install dependencies
+pip install -r requirements.txt
 
-Check what Python versions are available:
-```bash
-ls /usr/bin/python*
-```
+# Create required directories
+mkdir -p logs output diagnostics
 
-Common alternatives:
-```bash
-# Try one of these:
-python3.9 -m venv venv
-python3.11 -m venv venv
-/usr/local/bin/python3 -m venv venv
-```
-
-If you find the correct path, edit `setup_cpanel.sh` line 14 to use it.
-
-### If you get "pip: externally-managed-environment" error
-
-This happens on newer systems. The virtual environment approach already handles this, but if it persists:
-```bash
-source venv/bin/activate
-pip install --break-system-packages -r requirements.txt
-```
-
----
-
-## Step 5: Configure Your Credentials
-
-Edit the `.env` file with your actual XIMS password:
-
-```bash
-nano ~/ims_automation/.env
-```
-
-Find this line:
-```
-IMS_PASSWORD=your_password_here
-```
-
-Replace `your_password_here` with your actual XIMS admin password.
-
-**Full `.env` configuration:**
-
-```env
-# XIMS Login (REQUIRED - fill these in)
-IMS_LOGIN_URL=https://ims.marvellousfiber.com/Admin
-IMS_USERNAME=countrylink
-IMS_PASSWORD=YOUR_ACTUAL_PASSWORD
-
-# Operational Settings
-IMS_PAGE_SIZE=50
-IMS_DATE_FORMAT=yyyy/MM/dd
-IMS_RETRY_COUNT=2
-IMS_CONN_TIMEOUT=30
-IMS_READ_TIMEOUT=60
-
-# Export (csv saves to output/ folder)
-IMS_EXPORT_FORMATS=csv
-
-# MySQL (set to true if you want database storage)
-IMS_MYSQL_ENABLED=false
-
-# Logging
-IMS_FILE_LOGGING=true
-IMS_DEBUG=false
-IMS_DIAGNOSTIC=false
-```
-
-Save: `Ctrl+O` → `Enter` → `Ctrl+X`
-
----
-
-## Step 6: Test the Fetcher Manually
-
-```bash
-cd ~/ims_automation
+# Set permissions
 chmod +x run_fetcher.sh
-./run_fetcher.sh
+```
+
+> **Tip**: Check the Python App page — it shows the exact path to your virtual environment's `activate` script. Copy that path.
+
+---
+
+## Step 6: Find Your Virtual Environment Path
+
+This is important for the cron job. In cPanel:
+
+1. Go to **Setup Python App**
+2. Click edit on your app
+3. Look for text like:
+   ```
+   source /home/YOUR_USERNAME/virtualenv/ims_automation/3.9/bin/activate
+   ```
+   or at the top it shows:
+   ```
+   Enter to the virtual environment: source /home/YOUR_USERNAME/virtualenv/ims_automation/3.9/bin/activate && cd /home/YOUR_USERNAME/ims_automation
+   ```
+
+4. **Copy this command** — you'll need it for the cron job
+
+---
+
+## Step 7: Test Manually
+
+SSH into your server and run:
+
+```bash
+# Activate the Python App's virtual environment (use YOUR path from Step 6)
+source /home/YOUR_USERNAME/virtualenv/ims_automation/3.9/bin/activate
+cd ~/ims_automation
+
+# Test the fetcher
+python -m src.main --from-date 2026/05/01 --to-date 2026/05/27 --export csv
+
+# Check output
+ls -la output/
 ```
 
 **Expected output:**
 ```
-=== IMS Fetch Started: 2026-05-27 12:00:00 ===
-Date range: 2026/05/26 to 2026/05/27
 2026-05-27 12:00:01 - INFO - src.main - IMS Data Fetcher starting
 2026-05-27 12:00:01 - INFO - src.main - Authenticating with ISP admin panel
 2026-05-27 12:00:02 - INFO - src.login_handler - Authentication successful
-2026-05-27 12:00:02 - INFO - src.main - Fetching renewal data...
 2026-05-27 12:00:03 - INFO - src.main - Fetched 45 total records
-2026-05-27 12:00:03 - INFO - src.main - Exporting to CSV: output/renewals_2026-05-26_2026-05-27.csv
+2026-05-27 12:00:03 - INFO - src.main - Exporting to CSV: output/renewals_2026-05-01_2026-05-27.csv
 2026-05-27 12:00:03 - INFO - src.main - IMS Data Fetcher completed successfully
-=== Fetch Completed Successfully ===
 ```
 
-**Verify the CSV was created:**
-```bash
-ls -la ~/ims_automation/output/
-cat ~/ims_automation/output/renewals_*.csv | head -5
-```
-
-### If login fails:
-
-1. **Check credentials**: Try logging in manually at `https://ims.marvellousfiber.com/Admin` in a browser
-2. **Enable diagnostics**: Edit `.env` and set `IMS_DIAGNOSTIC=true`, then re-run
-3. **Check diagnostic output**: `ls ~/ims_automation/diagnostics/` — look at the request/response files
-4. **Check if server can reach the URL**:
-   ```bash
-   source ~/ims_automation/venv/bin/activate
-   python -c "import requests; r = requests.get('https://ims.marvellousfiber.com/Admin'); print(r.status_code)"
-   ```
+If it works, proceed to set up the cron job.
 
 ---
 
-## Step 7: Set Up Automated Cron Job
+## Step 8: Set Up Cron Job
 
-### Via cPanel Interface
+### Via cPanel Cron Jobs
 
-1. Log into **cPanel**
-2. Go to **Advanced** → **Cron Jobs**
-3. Under "Add New Cron Job":
+1. Go to **cPanel** → **Advanced** → **Cron Jobs**
+2. Set schedule:
 
-| Field | Value |
-|-------|-------|
-| Common Settings | Once Per Day (or custom) |
-| Minute | `0` |
-| Hour | `6` |
-| Day | `*` |
-| Month | `*` |
-| Weekday | `*` |
+| Field | Value | Meaning |
+|-------|-------|---------|
+| Minute | `0` | At minute 0 |
+| Hour | `6` | At 6 AM |
+| Day | `*` | Every day |
+| Month | `*` | Every month |
+| Weekday | `*` | Every weekday |
 
-4. In the **Command** field, enter:
+3. **Command** — use the full activation path from Step 6:
 
-```
-/home/YOUR_USERNAME/ims_automation/run_fetcher.sh >> /home/YOUR_USERNAME/ims_automation/logs/cron.log 2>&1
-```
-
-> ⚠️ Replace `YOUR_USERNAME` with your actual cPanel username!
-
-5. Click **Add New Cron Job**
-
-### Verify Cron is Working
-
-Wait for the scheduled time, then check:
 ```bash
-cat ~/ims_automation/logs/cron.log
+source /home/YOUR_USERNAME/virtualenv/ims_automation/3.9/bin/activate && cd /home/YOUR_USERNAME/ims_automation && python -m src.main --from-date $(date -d 'yesterday' '+\%Y/\%m/\%d') --to-date $(date '+\%Y/\%m/\%d') --export csv >> /home/YOUR_USERNAME/ims_automation/logs/cron.log 2>&1
 ```
 
-Or run it manually to test the cron command:
+> ⚠️ **Important**: In cPanel cron commands, percent signs `%` must be escaped as `\%`
+
+### Alternative: Use the Shell Script
+
+If the above is too long, use the runner script instead:
+
 ```bash
-/home/YOUR_USERNAME/ims_automation/run_fetcher.sh >> /home/YOUR_USERNAME/ims_automation/logs/cron.log 2>&1
-cat ~/ims_automation/logs/cron.log
+/bin/bash /home/YOUR_USERNAME/ims_automation/run_fetcher.sh >> /home/YOUR_USERNAME/ims_automation/logs/cron.log 2>&1
 ```
+
+> **Note**: When using `run_fetcher.sh`, make sure the virtual environment path inside the script matches your actual path. Edit `run_fetcher.sh` if needed.
+
+4. Click **Add New Cron Job**
 
 ---
 
-## Step 8 (Optional): MySQL Database Export
+## Step 9 (Optional): MySQL Database Export
 
-If you want renewal data stored in a MySQL database:
+### 9.1 Create Database in cPanel
 
-### 8.1 Create Database
+1. **cPanel** → **MySQL Databases**
+2. Create database: type `ims` → it becomes `YOUR_USERNAME_ims`
+3. Create user: type `imsuser` with a strong password → becomes `YOUR_USERNAME_imsuser`
+4. Add user to database → grant **ALL PRIVILEGES**
 
-1. Go to **cPanel** → **MySQL Databases**
-2. Create new database: `YOUR_USERNAME_ims` (cPanel prefixes your username)
-3. Create new user: `YOUR_USERNAME_imsuser` with a strong password
-4. Click **Add User to Database** → select both → grant **ALL PRIVILEGES**
+### 9.2 Create Table
 
-### 8.2 Create the Table
-
-1. Go to **cPanel** → **phpMyAdmin**
-2. Select your new database from the left sidebar
-3. Click the **SQL** tab
-4. Paste and run:
+1. **cPanel** → **phpMyAdmin**
+2. Select your database
+3. Click **SQL** tab, paste:
 
 ```sql
 CREATE TABLE IF NOT EXISTS renewals (
@@ -303,91 +292,46 @@ CREATE TABLE IF NOT EXISTS renewals (
 );
 ```
 
-5. Click **Go**
+4. Click **Go**
 
-### 8.3 Update .env
+### 9.3 Add MySQL Environment Variables
 
-```bash
-nano ~/ims_automation/.env
-```
+Go back to **Setup Python App** → edit your app → add these environment variables:
 
-Update these lines:
-```env
-IMS_MYSQL_ENABLED=true
-IMS_MYSQL_HOST=localhost
-IMS_MYSQL_PORT=3306
-IMS_MYSQL_DB=YOUR_USERNAME_ims
-IMS_MYSQL_USER=YOUR_USERNAME_imsuser
-IMS_MYSQL_PASSWORD=your_db_password
-IMS_EXPORT_FORMATS=csv,mysql
-```
+| Name | Value |
+|------|-------|
+| `IMS_MYSQL_ENABLED` | `true` |
+| `IMS_MYSQL_HOST` | `localhost` |
+| `IMS_MYSQL_PORT` | `3306` |
+| `IMS_MYSQL_DB` | `YOUR_USERNAME_ims` |
+| `IMS_MYSQL_USER` | `YOUR_USERNAME_imsuser` |
+| `IMS_MYSQL_PASSWORD` | `your_db_password` |
+| `IMS_EXPORT_FORMATS` | `csv,mysql` |
 
-### 8.4 Test MySQL Export
-
-```bash
-cd ~/ims_automation
-./run_fetcher.sh
-```
-
-Then check in phpMyAdmin that records appeared in the `renewals` table.
+Click **Save**.
 
 ---
 
-## Custom Date Range Fetch
+## Verifying Everything Works
 
-To fetch data for a specific date range (not just yesterday-to-today):
-
+### Check Cron Logs
 ```bash
-cd ~/ims_automation
-source venv/bin/activate
-python -m src.main --from-date 2026/01/01 --to-date 2026/05/27 --export csv
-deactivate
-```
-
----
-
-## Monitoring & Maintenance
-
-### Check Logs
-
-```bash
-# Cron execution log
 tail -50 ~/ims_automation/logs/cron.log
+```
 
-# Application log (detailed)
+### Check Application Logs
+```bash
 tail -50 ~/ims_automation/logs/ims_data_fetcher.log
 ```
 
-### View Recent CSV Exports
-
+### Check CSV Output
 ```bash
 ls -lt ~/ims_automation/output/ | head -10
+head -5 ~/ims_automation/output/renewals_*.csv
 ```
 
-### Clear Old Files (optional cleanup cron)
-
-Add another cron job to delete CSVs older than 30 days:
-```
-0 0 * * 0 find /home/YOUR_USERNAME/ims_automation/output -name "*.csv" -mtime +30 -delete
-```
-
-### Update the Application
-
-If you make code changes:
-```bash
-cd ~/ims_automation
-# Upload new src/ files via File Manager or SFTP
-# Then restart is automatic (no daemon to restart — it's a cron script)
-```
-
-### Update Dependencies
-
-```bash
-cd ~/ims_automation
-source venv/bin/activate
-pip install -r requirements.txt --upgrade
-deactivate
-```
+### Check MySQL Data (if enabled)
+Go to **phpMyAdmin** → select your database → browse the `renewals` table.
 
 ---
 
@@ -395,60 +339,55 @@ deactivate
 
 | Problem | Solution |
 |---------|----------|
-| `python3: command not found` | Try `python3.9`, `python3.11`, or check `/usr/bin/python*` |
-| `ModuleNotFoundError` | Make sure `source venv/bin/activate` is in your script |
-| Connection timeout to XIMS | Your host may block outbound HTTPS — contact support |
-| Login fails with "no session cookie" | Credentials may be wrong, or XIMS changed their login form |
-| `Permission denied` on run_fetcher.sh | Run `chmod +x ~/ims_automation/run_fetcher.sh` |
-| Cron not running | Check cPanel → Cron Jobs, verify the path is absolute |
-| Empty CSV (0 records) | Check date range — there may be no renewals for that period |
-| MySQL connection refused | Verify host is `localhost`, and user has privileges on the database |
+| `ModuleNotFoundError: No module named 'src'` | Make sure you `cd` to the project directory before running |
+| `ModuleNotFoundError: No module named 'requests'` | Dependencies not installed — run pip install in the venv |
+| Environment variables not found | Verify they're set in Setup Python App; for cron, use the full `source activate` command |
+| Login fails | Enable `IMS_DIAGNOSTIC=true` in env vars, re-run, check `diagnostics/` folder |
+| Connection timeout | Your host may block outbound HTTPS — contact hosting support |
+| `Permission denied` on script | Run `chmod +x ~/ims_automation/run_fetcher.sh` |
+| Cron not running | Verify path is absolute, `%` is escaped as `\%` in cPanel cron |
+| Empty CSV | No renewals in that date range — try a wider range |
+| `python: command not found` in cron | Use full path: `/home/YOUR_USERNAME/virtualenv/ims_automation/3.9/bin/python` |
 
-### Enable Debug Mode for Troubleshooting
+### Quick Debug Test
 
 ```bash
-nano ~/ims_automation/.env
-# Set these:
-# IMS_DEBUG=true
-# IMS_DIAGNOSTIC=true
+source /home/YOUR_USERNAME/virtualenv/ims_automation/3.9/bin/activate
+cd ~/ims_automation
+python -c "
+from src.config_loader import load_config
+config = load_config()
+print(f'Login URL: {config.login_url}')
+print(f'Username: {config.username}')
+print(f'Password: {\"*\" * len(config.password)}')
+print('Config loaded successfully!')
+"
 ```
 
-Then run again — check `diagnostics/` folder for raw HTTP request/response data.
+This confirms environment variables are being read correctly.
 
 ---
 
 ## Security Notes
 
-- `.env` file permissions are set to `600` (only your user can read it)
-- Passwords are never logged (masked with `***MASKED***` in all output)
-- The `.gitignore` excludes `.env` from version control
-- MySQL password is excluded from error messages
+- ✅ Credentials stored in cPanel's Python App environment variables (not in files)
+- ✅ No `.env` file on the server (nothing to accidentally expose)
+- ✅ Passwords are masked in all log output (`***MASKED***`)
+- ✅ MySQL password excluded from error messages
+- ✅ Environment variables are only accessible to your user account
 
 ---
 
-## Summary of Commands
+## Summary
 
-```bash
-# One-time setup
-cd ~/ims_automation
-chmod +x setup_cpanel.sh run_fetcher.sh
-./setup_cpanel.sh
-nano .env  # Fill in your password
-
-# Manual test
-./run_fetcher.sh
-
-# Check results
-ls output/
-cat logs/cron.log
-
-# Custom date range
-source venv/bin/activate
-python -m src.main --from-date 2026/01/01 --to-date 2026/05/31 --export csv
-deactivate
-```
-
-**Cron command** (add in cPanel → Cron Jobs):
-```
-0 6 * * * /home/YOUR_USERNAME/ims_automation/run_fetcher.sh >> /home/YOUR_USERNAME/ims_automation/logs/cron.log 2>&1
-```
+| Step | Action | Where |
+|------|--------|-------|
+| 1 | Create Python App | cPanel → Setup Python App |
+| 2 | Upload files | File Manager / SFTP |
+| 3 | Create passenger_wsgi.py | File Manager |
+| 4 | Set environment variables | Setup Python App → Environment variables |
+| 5 | Install dependencies | Setup Python App → Pip Install / SSH |
+| 6 | Note venv path | Setup Python App page |
+| 7 | Test manually | SSH Terminal |
+| 8 | Create cron job | cPanel → Cron Jobs |
+| 9 | (Optional) MySQL setup | MySQL Databases + phpMyAdmin |

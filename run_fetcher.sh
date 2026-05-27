@@ -3,14 +3,24 @@
 # IMS Data Fetcher - cPanel Cron Runner
 # Target: XIMS Panel at ims.marvellousfiber.com
 # Schedule this via cPanel > Cron Jobs
+#
+# Environment variables are set in:
+#   cPanel > Setup Python App > Environment Variables
+# No .env file needed on the server.
 # ============================================================
 
 # Navigate to project directory (auto-detect from script location)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Activate virtual environment
-source venv/bin/activate
+# Source the Python app's virtual environment activation script
+# cPanel Python App creates this at the app root
+if [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/venv/bin/activate"
+elif [ -f "/home/$USER/virtualenv/ims_automation/bin/activate" ]; then
+    # cPanel sometimes puts venvs here
+    source "/home/$USER/virtualenv/ims_automation/bin/activate"
+fi
 
 # Calculate date range (yesterday to today)
 FROM_DATE=$(date -d 'yesterday' '+%Y/%m/%d')
@@ -39,6 +49,6 @@ fi
 echo ""
 
 # Deactivate
-deactivate
+deactivate 2>/dev/null
 
 exit $EXIT_CODE
