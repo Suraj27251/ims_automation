@@ -1,1 +1,1 @@
-# IMS Data Fetcher - Source Package
+"""IMS Renewal Data Fetcher."""
