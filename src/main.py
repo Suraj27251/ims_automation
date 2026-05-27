@@ -113,13 +113,34 @@ def load_env() -> dict:
         print("Set them in .env file or as environment variables.", file=sys.stderr)
         sys.exit(1)
 
-    # MySQL config (optional)
+    # MySQL config (optional) - check multiple env var naming conventions
     mysql_config = {
-        "MYSQL_HOST": os.environ.get("MYSQL_HOST") or os.environ.get("IMS_MYSQL_HOST"),
-        "MYSQL_USER": os.environ.get("MYSQL_USER") or os.environ.get("IMS_MYSQL_USER"),
-        "MYSQL_PASSWORD": os.environ.get("MYSQL_PASSWORD") or os.environ.get("IMS_MYSQL_PASSWORD"),
-        "MYSQL_DATABASE": os.environ.get("MYSQL_DATABASE") or os.environ.get("IMS_MYSQL_DB"),
-        "MYSQL_PORT": int(os.environ.get("MYSQL_PORT") or os.environ.get("IMS_MYSQL_PORT", "3306")),
+        "MYSQL_HOST": (
+            os.environ.get("MYSQL_HOST")
+            or os.environ.get("DB_HOST")
+            or os.environ.get("IMS_MYSQL_HOST")
+        ),
+        "MYSQL_USER": (
+            os.environ.get("MYSQL_USER")
+            or os.environ.get("DB_USER")
+            or os.environ.get("IMS_MYSQL_USER")
+        ),
+        "MYSQL_PASSWORD": (
+            os.environ.get("MYSQL_PASSWORD")
+            or os.environ.get("DB_PASSWORD")
+            or os.environ.get("IMS_MYSQL_PASSWORD")
+        ),
+        "MYSQL_DATABASE": (
+            os.environ.get("MYSQL_DATABASE")
+            or os.environ.get("DB_NAME")
+            or os.environ.get("IMS_MYSQL_DB")
+        ),
+        "MYSQL_PORT": int(
+            os.environ.get("MYSQL_PORT")
+            or os.environ.get("DB_PORT")
+            or os.environ.get("IMS_MYSQL_PORT")
+            or "3306"
+        ),
     }
 
     return {**required, **mysql_config}
@@ -215,12 +236,21 @@ def main() -> int:
 
     # Check MySQL config
     if not env.get("MYSQL_HOST") or not env.get("MYSQL_DATABASE"):
-        logger.warning("MySQL not configured. Printing records to console instead.")
+        logger.warning(
+            "MySQL not configured (MYSQL_HOST=%s, MYSQL_DATABASE=%s). "
+            "Printing records to console instead.",
+            env.get("MYSQL_HOST"), env.get("MYSQL_DATABASE"),
+        )
         for r in records:
             print(f"{r.user_id} | {r.cust_name} | {r.mobile_no} | {r.plan_name} | {r.amount} | {r.plan_expiry_date} | {r.zone_name}")
         return 0
 
     from src.database import Database, DatabaseError
+
+    logger.info(
+        "Connecting to MySQL: %s@%s/%s",
+        env["MYSQL_USER"], env["MYSQL_HOST"], env["MYSQL_DATABASE"],
+    )
 
     db = Database(
         host=env["MYSQL_HOST"],

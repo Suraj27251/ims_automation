@@ -57,24 +57,45 @@ class Database:
         Raises:
             DatabaseError: If connection fails.
         """
+        # Try mysql-connector-python first, fall back to PyMySQL
         try:
             import mysql.connector
-        except ImportError as e:
-            raise DatabaseError(
-                "mysql-connector-python is not installed. "
-                "Install with: pip install mysql-connector-python"
-            ) from e
+            self._driver = "mysql.connector"
+        except ImportError:
+            try:
+                import pymysql
+                self._driver = "pymysql"
+            except ImportError as e:
+                raise DatabaseError(
+                    "No MySQL driver found. Install one of:\n"
+                    "  pip install mysql-connector-python\n"
+                    "  pip install PyMySQL"
+                ) from e
 
         try:
-            self._connection = mysql.connector.connect(
-                host=self.host,
-                port=self.port,
-                user=self.user,
-                password=self.password,
-                database=self.database,
-                charset="utf8mb4",
-                autocommit=False,
-            )
+            if self._driver == "mysql.connector":
+                import mysql.connector
+                self._connection = mysql.connector.connect(
+                    host=self.host,
+                    port=self.port,
+                    user=self.user,
+                    password=self.password,
+                    database=self.database,
+                    charset="utf8mb4",
+                    autocommit=False,
+                )
+            else:
+                import pymysql
+                self._connection = pymysql.connect(
+                    host=self.host,
+                    port=self.port,
+                    user=self.user,
+                    password=self.password,
+                    database=self.database,
+                    charset="utf8mb4",
+                    autocommit=False,
+                )
+
             logger.info("Connected to MySQL: %s@%s:%d/%s", self.user, self.host, self.port, self.database)
 
             # Ensure table exists
@@ -104,7 +125,7 @@ class Database:
             logger.info("No records to save.")
             return 0
 
-        if not self._connection or not self._connection.is_connected():
+        if not self._connection:
             raise DatabaseError("Not connected to database. Call connect() first.")
 
         try:
@@ -137,9 +158,12 @@ class Database:
 
     def close(self) -> None:
         """Close database connection."""
-        if self._connection and self._connection.is_connected():
-            self._connection.close()
-            logger.info("Database connection closed.")
+        if self._connection:
+            try:
+                self._connection.close()
+                logger.info("Database connection closed.")
+            except Exception:
+                pass
 
     def _ensure_table(self) -> None:
         """Create renewals table if it doesn't exist."""
