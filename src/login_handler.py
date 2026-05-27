@@ -58,6 +58,7 @@ class LoginHandler:
         1. GET login page to extract hidden tokens
         2. POST credentials + tokens to login endpoint
         3. Validate response contains session cookies
+        4. Navigate to renewal page to establish ASP.NET page context
 
         Raises:
             LoginError: If authentication fails (401/403 or no session cookie).
@@ -102,7 +103,73 @@ class LoginHandler:
 
         # Step 3: Validate response
         self._validate_login_response(post_response)
+
+        # Log session cookies for diagnostics
+        cookies = self._session_manager.session.cookies.get_dict()
+        logger.debug(
+            "Session cookies after login: %s",
+            list(cookies.keys()),
+        )
+
+        # Step 4: Navigate to the renewal report page to establish page context.
+        # ASP.NET MVC often requires visiting the page before its AJAX endpoints
+        # will accept requests (sets server-side session state for the page).
+        self._establish_page_context()
+
         logger.info("Authentication successful for: %s", login_url)
+
+    def _establish_page_context(self) -> None:
+        """Navigate to the renewal report page after login.
+
+        ASP.NET applications often require the user to visit a page before
+        its AJAX/DataTables endpoints will respond with JSON. This GET request
+        establishes the server-side page context and ensures any required
+        anti-forgery tokens or session state are initialized.
+        """
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self._config.login_url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        renewal_page_url = f"{base_url}/MISReport/UpcommingRenewal"
+
+        logger.debug(
+            "Navigating to renewal page to establish context: %s",
+            renewal_page_url,
+        )
+
+        try:
+            response = self._session_manager.session.get(
+                renewal_page_url,
+                timeout=(
+                    self._config.connection_timeout,
+                    self._config.read_timeout,
+                ),
+                headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                },
+            )
+            logger.debug(
+                "Renewal page response: status=%d, url=%s",
+                response.status_code,
+                response.url,
+            )
+
+            # If we got redirected back to login, the session is not valid
+            if response.url and "login" in response.url.lower():
+                logger.warning(
+                    "Renewal page redirected to login: %s. "
+                    "Session may not be fully authenticated.",
+                    response.url,
+                )
+
+        except Exception as exc:
+            # Non-fatal: log and continue, the API request will fail with
+            # a clear error if the context wasn't established
+            logger.warning(
+                "Failed to navigate to renewal page: %s. "
+                "API requests may fail if page context is required.",
+                exc,
+            )
 
     def _extract_hidden_fields(self, html: str) -> Dict[str, str]:
         """Parse HTML and extract all hidden input field name/value pairs.

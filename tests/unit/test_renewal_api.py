@@ -234,7 +234,15 @@ class TestFetchAllRenewals:
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.text = '{"draw":1,"recordsTotal":' + str(records_total) + ',"data":[]}'
         mock_response.json.return_value = json_data
+        mock_response.url = "https://admin.example.com/MISReport/UpcommingRenewal/GetData"
+        mock_response.history = []
         return mock_response
+
+    def _make_session_manager(self):
+        """Helper to create a mock session manager with cookies support."""
+        session_manager = MagicMock()
+        session_manager.session.cookies.get_dict.return_value = {}
+        return session_manager
 
     def _make_record_data(self, user_id):
         """Helper to create a single record dict."""
@@ -250,7 +258,7 @@ class TestFetchAllRenewals:
 
     def test_pagination_with_multi_page_responses(self):
         """Test pagination fetches multiple pages until all records retrieved."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -278,7 +286,7 @@ class TestFetchAllRenewals:
 
     def test_pagination_stops_on_empty_page(self):
         """Test pagination stops immediately when empty data array received."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -302,7 +310,7 @@ class TestFetchAllRenewals:
 
     def test_pagination_stops_when_cumulative_gte_records_total(self):
         """Test pagination stops when cumulative records >= recordsTotal."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -330,7 +338,7 @@ class TestFetchAllRenewals:
 
     def test_pagination_stops_when_cumulative_exceeds_records_total(self):
         """Test pagination stops when cumulative records exceed recordsTotal."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -353,7 +361,7 @@ class TestFetchAllRenewals:
 
     def test_single_page_response(self):
         """Test single page response when all records fit in one page."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -375,7 +383,7 @@ class TestFetchAllRenewals:
 
     def test_empty_first_page_returns_empty_list(self):
         """Test empty first page returns empty list immediately."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -395,7 +403,7 @@ class TestFetchAllRenewals:
 
     def test_fetch_sends_post_to_correct_endpoint(self):
         """Test fetch sends POST to the correct endpoint URL."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -415,7 +423,7 @@ class TestFetchAllRenewals:
 
     def test_fetch_passes_search_term(self):
         """Test fetch passes search term through to payload."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -437,7 +445,7 @@ class TestFetchAllRenewals:
 
     def test_pagination_increments_start_offset(self):
         """Test pagination increments start offset by page_size each page."""
-        session_manager = MagicMock()
+        session_manager = self._make_session_manager()
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -469,8 +477,9 @@ class TestFetchPage:
     """Tests for _fetch_page() method."""
 
     def test_fetch_page_sends_post_with_payload(self):
-        """Test _fetch_page sends POST request with given payload."""
+        """Test _fetch_page sends POST request with given payload and AJAX headers."""
         session_manager = MagicMock()
+        session_manager.session.cookies.get_dict.return_value = {}
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com",
@@ -481,6 +490,8 @@ class TestFetchPage:
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.text = '{"data": [], "recordsTotal": 0}'
         mock_response.json.return_value = {"data": [], "recordsTotal": 0}
+        mock_response.url = "https://admin.example.com/MISReport/UpcommingRenewal/GetData"
+        mock_response.history = []
         session_manager.post.return_value = mock_response
 
         payload = {"draw": 1, "start": 0, "length": 10}
@@ -489,12 +500,19 @@ class TestFetchPage:
         session_manager.post.assert_called_once_with(
             "https://admin.example.com/MISReport/UpcommingRenewal/GetData",
             data=payload,
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Referer": "https://admin.example.com/MISReport/UpcommingRenewal",
+            },
         )
         assert result == {"data": [], "recordsTotal": 0}
 
     def test_fetch_page_strips_trailing_slash_from_base_url(self):
         """Test base_url trailing slash is stripped for endpoint construction."""
         session_manager = MagicMock()
+        session_manager.session.cookies.get_dict.return_value = {}
         api = RenewalAPI(
             session_manager=session_manager,
             base_url="https://admin.example.com/",
@@ -505,6 +523,8 @@ class TestFetchPage:
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.text = '{"data": [], "recordsTotal": 0}'
         mock_response.json.return_value = {"data": [], "recordsTotal": 0}
+        mock_response.url = "https://admin.example.com/MISReport/UpcommingRenewal/GetData"
+        mock_response.history = []
         session_manager.post.return_value = mock_response
 
         api._fetch_page({"draw": 1})

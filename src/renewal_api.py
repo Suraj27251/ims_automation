@@ -238,15 +238,42 @@ class RenewalAPI:
             payload.get("start"),
         )
 
-        response = self._session_manager.post(url, data=payload)
+        # ASP.NET MVC DataTables endpoints require AJAX headers to return JSON.
+        # Without these, the server treats the request as a regular page navigation
+        # and redirects to the login page (even with valid session cookies).
+        ajax_headers = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Referer": f"{self._base_url}/MISReport/UpcommingRenewal",
+        }
+
+        # Log session cookies for diagnostics
+        session_cookies = self._session_manager.session.cookies.get_dict()
+        logger.debug(
+            "Session cookies before API request: %s",
+            list(session_cookies.keys()),
+        )
+
+        response = self._session_manager.post(url, data=payload, headers=ajax_headers)
 
         # Log response metadata for diagnostics
         logger.debug(
-            "Response: status=%d, content-type=%s, content-length=%s",
+            "Response: status=%d, content-type=%s, content-length=%s, url=%s",
             response.status_code,
             response.headers.get("Content-Type", "N/A"),
             response.headers.get("Content-Length", "N/A"),
+            response.url,
         )
+
+        # Detect silent redirects (response.url differs from request url)
+        if hasattr(response, "url") and response.url and response.url != url:
+            logger.warning(
+                "Request was redirected: %s -> %s (history: %d redirects)",
+                url,
+                response.url,
+                len(response.history) if hasattr(response, "history") else 0,
+            )
 
         # Check for non-200 status codes
         if response.status_code != 200:

@@ -44,6 +44,19 @@ class SessionManager:
         self._reauth_callback = reauth_callback
         self._reauth_timestamps: list = []
 
+        # Set default headers that mimic a browser session.
+        # ASP.NET servers may reject requests without a proper User-Agent
+        # or may require specific Accept headers for AJAX endpoints.
+        self._session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+        })
+
     @property
     def session(self) -> requests.Session:
         """Access the underlying requests.Session."""
