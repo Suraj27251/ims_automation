@@ -17,7 +17,7 @@ from src.data_exporter import DataExporter, ExportError
 from src.data_parser import ParseError
 from src.diagnostics import DiagnosticsManager
 from src.login_handler import LoginError, LoginHandler
-from src.renewal_api import RenewalAPI
+from src.renewal_api import APIResponseError, RenewalAPI
 from src.session_manager import AuthenticationError, SessionManager
 
 logger = logging.getLogger(__name__)
@@ -317,6 +317,10 @@ def main() -> int:
 
     except (LoginError, AuthenticationError) as exc:
         logger.error("Authentication error: %s", exc)
+        return 1
+
+    except APIResponseError as exc:
+        logger.error("API response error: %s", exc)
         return 1
 
     except ParseError as exc:

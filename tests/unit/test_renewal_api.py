@@ -223,13 +223,17 @@ class TestFetchAllRenewals:
 
     def _make_response(self, data, records_total):
         """Helper to create a mock response with .json() method."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        json_data = {
             "draw": 1,
             "recordsTotal": records_total,
             "recordsFiltered": records_total,
             "data": data,
         }
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.text = '{"draw":1,"recordsTotal":' + str(records_total) + ',"data":[]}'
+        mock_response.json.return_value = json_data
         return mock_response
 
     def _make_record_data(self, user_id):
@@ -473,6 +477,9 @@ class TestFetchPage:
         )
 
         mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.text = '{"data": [], "recordsTotal": 0}'
         mock_response.json.return_value = {"data": [], "recordsTotal": 0}
         session_manager.post.return_value = mock_response
 
@@ -494,6 +501,9 @@ class TestFetchPage:
         )
 
         mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.text = '{"data": [], "recordsTotal": 0}'
         mock_response.json.return_value = {"data": [], "recordsTotal": 0}
         session_manager.post.return_value = mock_response
 

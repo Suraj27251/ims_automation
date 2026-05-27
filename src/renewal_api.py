@@ -4,6 +4,7 @@ Constructs DataTables-compatible payloads and handles paginated data fetching
 from the /MISReport/UpcommingRenewal/GetData endpoint.
 """
 
+import json
 import logging
 from datetime import date
 from typing import List, Optional
@@ -13,6 +14,12 @@ logger = logging.getLogger(__name__)
 
 class PayloadConstructionError(Exception):
     """Raised when DataTables payload cannot be constructed."""
+
+    pass
+
+
+class APIResponseError(Exception):
+    """Raised when the API returns a non-JSON or unexpected response."""
 
     pass
 
@@ -209,18 +216,172 @@ class RenewalAPI:
     def _fetch_page(self, payload: dict) -> dict:
         """Send single page request and return parsed JSON response.
 
+        Validates response status, content-type, and body before parsing.
+        Logs detailed diagnostics on failure to aid debugging.
+
         Args:
             payload: DataTables-compatible POST payload dictionary.
 
         Returns:
             Dict with 'data' (list) and 'recordsTotal' (int) keys.
+
+        Raises:
+            APIResponseError: If the response is not valid JSON or indicates
+                a redirect/login page.
         """
         url = f"{self._base_url}{self.ENDPOINT_PATH}"
 
-        logger.debug("Fetching page from %s with draw=%s, start=%s", url, payload.get("draw"), payload.get("start"))
+        logger.debug(
+            "Fetching page from %s with draw=%s, start=%s",
+            url,
+            payload.get("draw"),
+            payload.get("start"),
+        )
 
         response = self._session_manager.post(url, data=payload)
-        return response.json()
+
+        # Log response metadata for diagnostics
+        logger.debug(
+            "Response: status=%d, content-type=%s, content-length=%s",
+            response.status_code,
+            response.headers.get("Content-Type", "N/A"),
+            response.headers.get("Content-Length", "N/A"),
+        )
+
+        # Check for non-200 status codes
+        if response.status_code != 200:
+            response_preview = response.text[:500] if response.text else "(empty)"
+            logger.error(
+                "API returned HTTP %d for %s. Headers: %s. Body preview: %s",
+                response.status_code,
+                url,
+                dict(response.headers),
+                response_preview,
+            )
+            raise APIResponseError(
+                f"API returned HTTP {response.status_code} for {url}"
+            )
+
+        # Check for empty response body
+        if not response.text or not response.text.strip():
+            logger.error(
+                "API returned empty response body for %s. "
+                "Status: %d, Headers: %s",
+                url,
+                response.status_code,
+                dict(response.headers),
+            )
+            raise APIResponseError(
+                f"API returned empty response body for {url}"
+            )
+
+        # Validate content-type is JSON
+        content_type = response.headers.get("Content-Type", "")
+        if content_type and "json" not in content_type.lower():
+            response_preview = response.text[:500]
+            logger.error(
+                "API returned non-JSON content-type '%s' for %s. "
+                "Body preview: %s",
+                content_type,
+                url,
+                response_preview,
+            )
+            # Detect redirect to login page (ASP.NET session expired)
+            if self._is_login_page(response.text):
+                raise APIResponseError(
+                    f"Session expired: API redirected to login page for {url}. "
+                    f"Content-Type: {content_type}"
+                )
+            raise APIResponseError(
+                f"API returned non-JSON response (Content-Type: {content_type}) "
+                f"for {url}. Body preview: {response_preview[:200]}"
+            )
+
+        # Detect login page even if content-type says JSON (some servers lie)
+        if self._is_login_page(response.text):
+            logger.error(
+                "API response appears to be a login/redirect page for %s. "
+                "Body preview: %s",
+                url,
+                response.text[:500],
+            )
+            raise APIResponseError(
+                f"Session expired: API response is a login page for {url}"
+            )
+
+        # Attempt JSON parsing with detailed error handling
+        try:
+            data = response.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            response_preview = response.text[:500]
+            logger.error(
+                "Failed to parse JSON from %s. Error: %s. "
+                "Status: %d, Content-Type: %s, Body preview: %s",
+                url,
+                exc,
+                response.status_code,
+                content_type,
+                response_preview,
+            )
+            raise APIResponseError(
+                f"Invalid JSON response from {url}: {exc}. "
+                f"Content-Type: {content_type}. "
+                f"Body preview: {response_preview[:200]}"
+            ) from exc
+
+        # Validate expected DataTables response structure
+        if not isinstance(data, dict):
+            logger.error(
+                "API response is not a JSON object for %s. Got type: %s",
+                url,
+                type(data).__name__,
+            )
+            raise APIResponseError(
+                f"API response is not a JSON object for {url}. "
+                f"Got: {type(data).__name__}"
+            )
+
+        if "data" not in data:
+            logger.warning(
+                "API response missing 'data' key for %s. Keys: %s. "
+                "Full response: %s",
+                url,
+                list(data.keys()),
+                str(data)[:500],
+            )
+
+        return data
+
+    @staticmethod
+    def _is_login_page(text: str) -> bool:
+        """Detect if the response body is a login/redirect page.
+
+        Checks for common ASP.NET login page indicators.
+
+        Args:
+            text: Response body text.
+
+        Returns:
+            True if the response appears to be a login page.
+        """
+        if not text:
+            return False
+        text_lower = text[:2000].lower()
+        login_indicators = [
+            "txtusername",
+            "txtpassword",
+            "__viewstate",
+            "login",
+            "<form",
+            "id=\"loginform\"",
+        ]
+        # If it starts with '<' it's likely HTML, not JSON
+        is_html = text.strip().startswith("<")
+        has_login_markers = sum(
+            1 for indicator in login_indicators if indicator in text_lower
+        )
+        # Consider it a login page if it's HTML with 2+ login markers
+        return is_html and has_login_markers >= 2
 
     def _format_date(self, d: date) -> str:
         """Format a date object using the configured date format pattern.
