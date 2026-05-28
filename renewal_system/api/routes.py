@@ -100,7 +100,10 @@ def get_renewals():
                     WHERE wcl.renewal_id = r.id AND wcl.status = 'sent') as last_sent_at,
                    (SELECT template_name FROM whatsapp_campaign_logs wcl
                     WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
-                    ORDER BY sent_at DESC LIMIT 1) as last_template_sent
+                    ORDER BY sent_at DESC LIMIT 1) as last_template_sent,
+                   (SELECT delivery_status FROM whatsapp_campaign_logs wcl
+                    WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
+                    ORDER BY sent_at DESC LIMIT 1) as delivery_status
             FROM renewal_records r
             WHERE {where_clause}
             ORDER BY r.{sort_by} {sort_dir}

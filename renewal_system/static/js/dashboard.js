@@ -228,6 +228,7 @@ function renderTable(records) {
             <td>${daysText}</td>
             <td><small class="text-muted">${template}</small></td>
             <td>${badge}</td>
+            <td>${getDeliveryBadge(r.delivery_status)}</td>
             <td><small class="text-muted">${r.last_sent_at || '--'}</small></td>
             <td>
                 <button class="btn btn-sm btn-success btn-send" onclick="openSendModal(${r.id})" title="Send WhatsApp">
@@ -265,6 +266,17 @@ function getDaysText(days) {
     if (days < 0) return `<span class="text-danger fw-bold">${days}d</span>`;
     if (days === 0) return '<span class="text-warning fw-bold">Today</span>';
     return `<span class="text-success">${days}d</span>`;
+}
+
+function getDeliveryBadge(status) {
+    if (!status) return '<small class="text-muted">--</small>';
+    switch (status) {
+        case 'sent': return '<span class="badge bg-secondary"><i class="bi bi-check"></i> Sent</span>';
+        case 'delivered': return '<span class="badge bg-info"><i class="bi bi-check2-all"></i> Delivered</span>';
+        case 'read': return '<span class="badge bg-primary"><i class="bi bi-eye"></i> Read</span>';
+        case 'failed': return '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>';
+        default: return `<span class="badge bg-secondary">${status}</span>`;
+    }
 }
 
 // ============================================================

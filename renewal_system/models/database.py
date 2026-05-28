@@ -121,15 +121,20 @@ CREATE TABLE IF NOT EXISTS whatsapp_campaign_logs (
     template_name VARCHAR(100),
     template_params JSON,
     status VARCHAR(50) DEFAULT 'pending',
+    delivery_status VARCHAR(50) DEFAULT NULL,
     whatsapp_message_id VARCHAR(255),
     operator_name VARCHAR(255),
     error_message TEXT,
     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delivered_at TIMESTAMP NULL,
+    read_at TIMESTAMP NULL,
     INDEX idx_renewal_id (renewal_id),
     INDEX idx_mobile (mobile),
     INDEX idx_status (status),
+    INDEX idx_delivery_status (delivery_status),
     INDEX idx_sent_at (sent_at),
-    INDEX idx_template_name (template_name)
+    INDEX idx_template_name (template_name),
+    INDEX idx_whatsapp_message_id (whatsapp_message_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
@@ -153,4 +158,25 @@ def init_tables(config):
         cursor.execute(RENEWAL_RECORDS_TABLE)
         cursor.execute(WHATSAPP_CAMPAIGN_LOGS_TABLE)
         cursor.execute(OPERATOR_ACTIONS_TABLE)
+
+        # Add delivery_status column if table already exists without it
+        try:
+            cursor.execute("""
+                ALTER TABLE whatsapp_campaign_logs
+                ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(50) DEFAULT NULL,
+                ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP NULL,
+                ADD COLUMN IF NOT EXISTS read_at TIMESTAMP NULL
+            """)
+        except Exception:
+            pass  # Column already exists or MySQL version doesn't support IF NOT EXISTS
+
+        # Add index on whatsapp_message_id if not exists
+        try:
+            cursor.execute("""
+                ALTER TABLE whatsapp_campaign_logs
+                ADD INDEX idx_whatsapp_message_id (whatsapp_message_id)
+            """)
+        except Exception:
+            pass  # Index already exists
+
         logger.info("All renewal campaign tables initialized.")
