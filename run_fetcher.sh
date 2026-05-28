@@ -22,9 +22,9 @@ elif [ -f "/home/$USER/virtualenv/ims_automation/bin/activate" ]; then
     source "/home/$USER/virtualenv/ims_automation/bin/activate"
 fi
 
-# Calculate date range (yesterday to today)
+# Calculate date range (yesterday to 7 days ahead)
 FROM_DATE=$(date -d 'yesterday' '+%Y/%m/%d')
-TO_DATE=$(date '+%Y/%m/%d')
+TO_DATE=$(date -d '+7 days' '+%Y/%m/%d')
 
 # Log start time
 echo "=== IMS Fetch Started: $(date '+%Y-%m-%d %H:%M:%S') ==="
