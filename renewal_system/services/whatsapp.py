@@ -81,7 +81,7 @@ class WhatsAppService:
             "type": "template",
             "template": {
                 "name": template_name,
-                "language": {"code": "en"},
+                "language": {"code": "en_US"},
                 "components": components,
             },
         }
