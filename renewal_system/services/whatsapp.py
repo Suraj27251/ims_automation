@@ -52,7 +52,8 @@ class WhatsAppService:
 
     def send_template(self, mobile: str, template_name: str,
                       params: list, renewal_id: int,
-                      operator_name: str = "system") -> dict:
+                      operator_name: str = "system",
+                      skip_duplicate_check: bool = False) -> dict:
         """Send a WhatsApp template message.
 
         Args:
@@ -61,6 +62,7 @@ class WhatsAppService:
             params: List of parameter values for template placeholders.
             renewal_id: ID of the renewal record.
             operator_name: Name of the operator sending.
+            skip_duplicate_check: If True, skip the 24hr duplicate check.
 
         Returns:
             Dict with message_id, status, and log details.
@@ -68,8 +70,8 @@ class WhatsAppService:
         Raises:
             WhatsAppError: If API call fails or duplicate detected.
         """
-        # Check for duplicates
-        if self._is_duplicate(mobile, template_name, renewal_id):
+        # Check for duplicates (unless overridden)
+        if not skip_duplicate_check and self._is_duplicate(mobile, template_name, renewal_id):
             raise WhatsAppError(
                 f"Duplicate: Template '{template_name}' already sent to {mobile} "
                 f"within the last {self.duplicate_interval} hours."

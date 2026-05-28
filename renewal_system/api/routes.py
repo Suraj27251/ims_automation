@@ -282,11 +282,10 @@ def send_message():
     wa_service = WhatsAppService(config)
 
     try:
-        if override_duplicate:
-            # Skip duplicate check by directly sending
-            result = wa_service.send_template(mobile, template_name, params, renewal_id, operator_name)
-        else:
-            result = wa_service.send_template(mobile, template_name, params, renewal_id, operator_name)
+        result = wa_service.send_template(
+            mobile, template_name, params, renewal_id, operator_name,
+            skip_duplicate_check=override_duplicate
+        )
     except WhatsAppError as e:
         return jsonify({"success": False, "error": str(e)}), 409
 
