@@ -159,15 +159,18 @@ class WhatsAppService:
         """Log the send attempt to whatsapp_campaign_logs."""
         from renewal_system.models.database import get_db_cursor
 
+        # Set delivery_status: 'sent' on success, 'failed' on failure
+        delivery_status = 'sent' if status == 'sent' else ('failed' if status == 'failed' else None)
+
         with get_db_cursor(self.config) as cursor:
             cursor.execute("""
                 INSERT INTO whatsapp_campaign_logs
                     (renewal_id, mobile, template_name, template_params,
-                     status, whatsapp_message_id, operator_name, error_message)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                     status, delivery_status, whatsapp_message_id, operator_name, error_message)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 renewal_id, mobile, template_name,
-                json.dumps(params), status, message_id,
+                json.dumps(params), status, delivery_status, message_id,
                 operator_name, error_message,
             ))
 
