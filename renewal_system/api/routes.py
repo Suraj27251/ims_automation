@@ -347,12 +347,21 @@ def bulk_send():
         cat_info = CATEGORIES.get(category, CATEGORIES["upcoming"])
         template_name = cat_info["template"]
 
-        # Build params: {{1}} = name, {{2}} = account_id, {{3}} = expiry_date
-        params = [
-            record.get("customer_name", "Customer"),
-            record.get("account_id", ""),
-            str(record.get("expiry_date", "")),
-        ]
+        # Build params based on template requirements
+        # pack_expiry_alert: {{1}}=name, {{2}}=account_id, {{3}}=expiry_date
+        # recharge_today1: {{1}}=name, {{2}}=plan_name
+        # recharge_reminder: {{1}}=name, {{2}}=plan_name
+        if template_name == "pack_expiry_alert":
+            params = [
+                record.get("customer_name", "Customer"),
+                record.get("account_id", ""),
+                str(record.get("expiry_date", "")),
+            ]
+        else:
+            params = [
+                record.get("customer_name", "Customer"),
+                record.get("plan_name", ""),
+            ]
 
         try:
             wa_service.send_template(

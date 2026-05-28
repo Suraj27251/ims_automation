@@ -24,6 +24,25 @@ class WhatsAppService:
 
     API_BASE = "https://graph.facebook.com"
 
+    # Template configuration: param count and language code per template
+    TEMPLATE_CONFIG = {
+        "pack_expiry_alert": {
+            "language": "en",
+            "param_count": 3,
+            # {{1}} = name, {{2}} = account_id, {{3}} = expiry_date
+        },
+        "recharge_today1": {
+            "language": "en_US",
+            "param_count": 2,
+            # {{1}} = name, {{2}} = plan_name
+        },
+        "recharge_reminder": {
+            "language": "en_US",
+            "param_count": 2,
+            # {{1}} = name, {{2}} = plan_name
+        },
+    }
+
     def __init__(self, config):
         self.config = config
         self.token = config.WHATSAPP_TOKEN
@@ -67,9 +86,14 @@ class WhatsAppService:
         }
 
         # Build template components with parameters
+        # Trim params to match template's expected count
+        tmpl_config = self.TEMPLATE_CONFIG.get(template_name, {"language": "en_US", "param_count": len(params)})
+        language_code = tmpl_config["language"]
+        expected_params = params[:tmpl_config["param_count"]]
+
         components = []
-        if params:
-            body_params = [{"type": "text", "text": str(p)} for p in params]
+        if expected_params:
+            body_params = [{"type": "text", "text": str(p)} for p in expected_params]
             components.append({
                 "type": "body",
                 "parameters": body_params,
@@ -81,7 +105,7 @@ class WhatsAppService:
             "type": "template",
             "template": {
                 "name": template_name,
-                "language": {"code": "en_US"},
+                "language": {"code": language_code},
                 "components": components,
             },
         }
