@@ -350,17 +350,17 @@ def bulk_send():
         # Build params based on template requirements
         # pack_expiry_alert: {{1}}=name, {{2}}=account_id, {{3}}=expiry_date
         # recharge_today1: {{1}}=name, {{2}}=plan_name
-        # recharge_reminder: {{1}}=name, {{2}}=plan_name
-        if template_name == "pack_expiry_alert":
+        # recharge_reminder: {{1}}=name, {{2}}=account_id, {{3}}=expiry_date
+        if template_name == "recharge_today1":
             params = [
                 record.get("customer_name", "Customer"),
-                record.get("account_id", ""),
-                str(record.get("expiry_date", "")),
+                record.get("plan_name", ""),
             ]
         else:
             params = [
                 record.get("customer_name", "Customer"),
-                record.get("plan_name", ""),
+                record.get("account_id", ""),
+                str(record.get("expiry_date", "")),
             ]
 
         try:
