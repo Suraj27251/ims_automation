@@ -3,11 +3,12 @@
 Serves the HTML dashboard UI.
 """
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, redirect, url_for
 
 views_bp = Blueprint("views", __name__)
 
 
+@views_bp.route("/")
 @views_bp.route("/renewals")
 @views_bp.route("/renewals/")
 def dashboard():

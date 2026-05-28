@@ -3,7 +3,10 @@
  * Handles data loading, filtering, pagination, and WhatsApp sending.
  */
 
-const API_BASE = '/api/renewals';
+// Auto-detect base path from current URL (handles cPanel sub-path mounting)
+const SCRIPT_PATH = document.currentScript ? document.currentScript.src : '';
+const BASE_PATH = window.location.pathname.replace(/\/(renewals\/?)?$/, '');
+const API_BASE = BASE_PATH + '/api/renewals';
 
 // State
 let state = {

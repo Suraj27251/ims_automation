@@ -1,8 +1,7 @@
 """WSGI entry point for cPanel deployment.
 
-Serves both:
-- The Renewal Campaign Dashboard (Flask app)
-- A health check endpoint
+Serves the Renewal Campaign Dashboard (Flask app).
+Handles cPanel/Passenger sub-path mounting automatically.
 """
 
 import sys
