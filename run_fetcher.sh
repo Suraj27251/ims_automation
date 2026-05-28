@@ -42,6 +42,16 @@ EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo "=== Fetch Completed Successfully ==="
+
+    # Sync to campaign dashboard
+    echo "=== Running Campaign Sync ==="
+    python sync_renewals.py
+    SYNC_CODE=$?
+    if [ $SYNC_CODE -eq 0 ]; then
+        echo "=== Campaign Sync Completed ==="
+    else
+        echo "=== Campaign Sync FAILED (exit code: $SYNC_CODE) ==="
+    fi
 else
     echo "=== Fetch FAILED (exit code: $EXIT_CODE) ==="
 fi

@@ -1,13 +1,20 @@
-def application(environ, start_response):
-    body = b"IMS Automation Working"
+"""WSGI entry point for cPanel deployment.
 
-    status = "200 OK"
+Serves both:
+- The Renewal Campaign Dashboard (Flask app)
+- A health check endpoint
+"""
 
-    headers = [
-        ("Content-Type", "text/plain"),
-        ("Content-Length", str(len(body)))
-    ]
+import sys
+import os
 
-    start_response(status, headers)
+# Add project root to path
+sys.path.insert(0, os.path.dirname(__file__))
 
-    return [body]
+from renewal_system.app import create_app
+
+# Create the Flask application
+app = create_app()
+
+# WSGI application callable (required by cPanel/Passenger)
+application = app
