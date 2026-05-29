@@ -92,19 +92,44 @@ def get_renewals():
         cursor.execute(f"SELECT COUNT(*) as total FROM renewal_records r WHERE {where_clause}", params)
         total = cursor.fetchone()["total"]
 
-        # Get paginated records with last message info
+        # Get paginated records with last message info and delivery status
+        # Logic:
+        # - If campaign log status is 'failed' → failed
+        # - If customer replied (incoming msg from same phone after send) → read
+        # - If outgoing msg exists in whatsapp_messages → delivered
+        # - Otherwise use campaign log delivery_status (sent)
         offset = (page - 1) * per_page
         cursor.execute(f"""
             SELECT r.*,
-                   (SELECT MAX(sent_at) FROM whatsapp_campaign_logs wcl
-                    WHERE wcl.renewal_id = r.id AND wcl.status = 'sent') as last_sent_at,
-                   (SELECT template_name FROM whatsapp_campaign_logs wcl
-                    WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
-                    ORDER BY sent_at DESC LIMIT 1) as last_template_sent,
-                   (SELECT delivery_status FROM whatsapp_campaign_logs wcl
-                    WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
-                    ORDER BY sent_at DESC LIMIT 1) as delivery_status
+                   wcl_latest.sent_at as last_sent_at,
+                   wcl_latest.template_name as last_template_sent,
+                   CASE
+                       WHEN wcl_latest.id IS NULL THEN NULL
+                       WHEN wcl_latest.status = 'failed' THEN 'failed'
+                       WHEN EXISTS (
+                           SELECT 1 FROM whatsapp_messages wm
+                           WHERE wm.phone = r.mobile
+                             AND wm.sender_type = 'customer'
+                             AND wm.created_at > wcl_latest.sent_at
+                       ) THEN 'read'
+                       WHEN EXISTS (
+                           SELECT 1 FROM whatsapp_messages wm
+                           WHERE wm.whatsapp_message_id = wcl_latest.whatsapp_message_id
+                             AND wm.status = 'sent'
+                       ) THEN 'delivered'
+                       WHEN wcl_latest.delivery_status IS NOT NULL THEN wcl_latest.delivery_status
+                       ELSE 'sent'
+                   END as delivery_status
             FROM renewal_records r
+            LEFT JOIN (
+                SELECT wcl.*
+                FROM whatsapp_campaign_logs wcl
+                INNER JOIN (
+                    SELECT renewal_id, MAX(sent_at) as max_sent
+                    FROM whatsapp_campaign_logs
+                    GROUP BY renewal_id
+                ) latest ON wcl.renewal_id = latest.renewal_id AND wcl.sent_at = latest.max_sent
+            ) wcl_latest ON wcl_latest.renewal_id = r.id
             WHERE {where_clause}
             ORDER BY r.{sort_by} {sort_dir}
             LIMIT %s OFFSET %s
