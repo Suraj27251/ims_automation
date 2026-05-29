@@ -357,9 +357,9 @@ function openSendModal(recordId) {
     const template = TEMPLATE_MAP[record.category] || 'recharge_reminder';
     document.getElementById('modal-template').value = template;
 
-    // Auto-fill params
+    // Auto-fill params based on category
     document.getElementById('param-1').textContent = record.customer_name || 'Customer';
-    document.getElementById('param-2').textContent = record.account_id || '';
+    document.getElementById('param-2').textContent = record.plan_name || '';
     document.getElementById('param-3').textContent = record.expiry_date || '';
 
     // Check if already sent
@@ -385,14 +385,25 @@ async function confirmSend() {
     const templateName = document.getElementById('modal-template').value;
     const overrideDuplicate = document.getElementById('override-duplicate').checked;
 
+    // Build params based on template
+    let templateParams;
+    if (templateName === 'recharge_today1') {
+        templateParams = [
+            record.customer_name || 'Customer',
+            record.plan_name || '',
+        ];
+    } else {
+        templateParams = [
+            record.customer_name || 'Customer',
+            record.plan_name || '',
+            record.expiry_date || '',
+        ];
+    }
+
     const payload = {
         renewal_id: record.id,
         template_name: templateName,
-        params: [
-            record.customer_name || 'Customer',
-            record.account_id || '',
-            record.expiry_date || '',
-        ],
+        params: templateParams,
         operator_name: 'operator',  // TODO: get from session
         override_duplicate: overrideDuplicate,
     };

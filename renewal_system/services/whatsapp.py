@@ -29,7 +29,7 @@ class WhatsAppService:
         "pack_expiry_alert": {
             "language": "en",
             "param_count": 3,
-            # {{1}} = name, {{2}} = account_id, {{3}} = expiry_date
+            # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
         },
         "recharge_today1": {
             "language": "en_US",
@@ -39,7 +39,7 @@ class WhatsAppService:
         "recharge_reminder": {
             "language": "en_US",
             "param_count": 3,
-            # {{1}} = name, {{2}} = account_id, {{3}} = expiry_date
+            # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
         },
     }
 
