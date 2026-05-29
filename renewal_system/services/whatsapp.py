@@ -1,7 +1,15 @@
 """WhatsApp Cloud API service.
 
 Handles sending template messages via Meta WhatsApp Cloud API.
-Includes duplicate protection and logging.
+Includes duplicate protection, logging, and integration with the
+WhatsApp Inbox system (Countrylink Management System) for delivery tracking.
+
+When a template is sent:
+1. Message is sent via Meta Cloud API
+2. Logged in whatsapp_campaign_logs (IMS tracking)
+3. Inserted into whatsapp_conversations + whatsapp_messages (Inbox integration)
+4. The Inbox system's webhook automatically updates delivery status
+5. IMS dashboard reads status from whatsapp_messages via whatsapp_message_id
 """
 
 import json
@@ -127,6 +135,10 @@ class WhatsAppService:
             message_id = response_data.get("messages", [{}])[0].get("id", "")
             self._log_send(renewal_id, mobile, template_name, params,
                            "sent", message_id, operator_name)
+
+            # Insert into WhatsApp Inbox system for delivery tracking
+            self._sync_to_inbox(mobile, message_id, template_name, expected_params, operator_name)
+
             return {
                 "success": True,
                 "message_id": message_id,
@@ -137,6 +149,135 @@ class WhatsAppService:
             self._log_send(renewal_id, mobile, template_name, params,
                            "failed", None, operator_name, error_msg)
             raise WhatsAppError(f"WhatsApp API error: {error_msg}")
+
+    def _sync_to_inbox(self, mobile: str, message_id: str, template_name: str,
+                       params: list, operator_name: str):
+        """Insert the sent template into the WhatsApp Inbox system.
+
+        This creates/finds a conversation and inserts the message into
+        whatsapp_messages so it appears in the Inbox UI. The Inbox webhook
+        will then update the status (delivered/read) automatically.
+        """
+        from renewal_system.models.database import get_db_cursor
+
+        formatted_mobile = self._format_phone(mobile)
+        # Build a readable message text for the inbox
+        message_text = f"[Template: {template_name}] " + " | ".join(str(p) for p in params)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            with get_db_cursor(self.config) as cursor:
+                # Find or create conversation
+                cursor.execute(
+                    "SELECT id FROM whatsapp_conversations WHERE phone = %s LIMIT 1",
+                    (formatted_mobile,)
+                )
+                conversation = cursor.fetchone()
+
+                if conversation:
+                    conversation_id = conversation["id"]
+                else:
+                    # Create new conversation
+                    cursor.execute("""
+                        INSERT INTO whatsapp_conversations (
+                            phone, customer_name, last_message, last_message_at,
+                            unread_count, ai_enabled, human_takeover, created_at, updated_at
+                        ) VALUES (%s, %s, %s, NOW(), 0, 1, 0, NOW(), NOW())
+                    """, (formatted_mobile, formatted_mobile, message_text))
+                    conversation_id = cursor.lastrowid
+
+                # Insert message into whatsapp_messages
+                cursor.execute("""
+                    INSERT INTO whatsapp_messages (
+                        conversation_id, whatsapp_message_id, sender_type, phone,
+                        message_text, message_type, media_url, status, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    conversation_id,
+                    message_id,
+                    "human",  # sent by operator/system, not AI
+                    formatted_mobile,
+                    message_text,
+                    "template",
+                    None,
+                    "sent",
+                    now,
+                ))
+
+                # Update conversation last message
+                cursor.execute("""
+                    UPDATE whatsapp_conversations
+                    SET last_message = %s, last_message_at = NOW(), updated_at = NOW()
+                    WHERE id = %s
+                """, (message_text, conversation_id))
+
+            logger.info("Synced template to inbox: conversation_id=%s, wamid=%s",
+                        conversation_id, message_id)
+        except Exception as e:
+            # Don't fail the send if inbox sync fails — just log it
+            logger.warning("Failed to sync template to inbox (non-fatal): %s", e)
+
+    def get_delivery_status(self, whatsapp_message_id: str) -> Optional[str]:
+        """Get delivery status from the WhatsApp Inbox system.
+
+        Reads the status from whatsapp_messages table which is updated
+        by the Countrylink Management System's webhook.
+
+        Args:
+            whatsapp_message_id: The wamid returned by Meta API.
+
+        Returns:
+            Status string: 'sent', 'delivered', 'read', 'failed', or None.
+        """
+        if not whatsapp_message_id:
+            return None
+
+        from renewal_system.models.database import get_db_cursor
+
+        try:
+            with get_db_cursor(self.config) as cursor:
+                cursor.execute("""
+                    SELECT status FROM whatsapp_messages
+                    WHERE whatsapp_message_id = %s
+                    LIMIT 1
+                """, (whatsapp_message_id,))
+                row = cursor.fetchone()
+                return row["status"] if row else None
+        except Exception as e:
+            logger.warning("Failed to get delivery status for %s: %s", whatsapp_message_id, e)
+            return None
+
+    def bulk_get_delivery_status(self, message_ids: list) -> dict:
+        """Get delivery status for multiple messages at once.
+
+        Args:
+            message_ids: List of whatsapp_message_id strings.
+
+        Returns:
+            Dict mapping whatsapp_message_id -> status.
+        """
+        if not message_ids:
+            return {}
+
+        from renewal_system.models.database import get_db_cursor
+
+        # Filter out None/empty values
+        valid_ids = [mid for mid in message_ids if mid]
+        if not valid_ids:
+            return {}
+
+        try:
+            with get_db_cursor(self.config) as cursor:
+                placeholders = ",".join(["%s"] * len(valid_ids))
+                cursor.execute(f"""
+                    SELECT whatsapp_message_id, status FROM whatsapp_messages
+                    WHERE whatsapp_message_id IN ({placeholders})
+                """, valid_ids)
+                rows = cursor.fetchall()
+                return {row["whatsapp_message_id"]: row["status"] for row in rows}
+        except Exception as e:
+            logger.warning("Failed to bulk get delivery status: %s", e)
+            return {}
 
     def _is_duplicate(self, mobile: str, template_name: str, renewal_id: int) -> bool:
         """Check if the same template was sent recently."""

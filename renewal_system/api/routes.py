@@ -101,9 +101,9 @@ def get_renewals():
                    (SELECT template_name FROM whatsapp_campaign_logs wcl
                     WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
                     ORDER BY sent_at DESC LIMIT 1) as last_template_sent,
-                   (SELECT delivery_status FROM whatsapp_campaign_logs wcl
+                   (SELECT wcl.whatsapp_message_id FROM whatsapp_campaign_logs wcl
                     WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
-                    ORDER BY sent_at DESC LIMIT 1) as delivery_status
+                    ORDER BY sent_at DESC LIMIT 1) as last_wamid
             FROM renewal_records r
             WHERE {where_clause}
             ORDER BY r.{sort_by} {sort_dir}
@@ -111,7 +111,15 @@ def get_renewals():
         """, params + [per_page, offset])
         records = cursor.fetchall()
 
-    # Serialize dates
+    # Fetch delivery status from whatsapp_messages (Inbox system) for sent messages
+    wamid_list = [r["last_wamid"] for r in records if r.get("last_wamid")]
+    delivery_status_map = {}
+    if wamid_list:
+        from renewal_system.services.whatsapp import WhatsAppService
+        wa_service = WhatsAppService(config)
+        delivery_status_map = wa_service.bulk_get_delivery_status(wamid_list)
+
+    # Serialize dates and add delivery status
     for r in records:
         if r.get("expiry_date") and isinstance(r["expiry_date"], (date, datetime)):
             r["expiry_date"] = r["expiry_date"].strftime("%Y-%m-%d")
@@ -121,6 +129,15 @@ def get_renewals():
             r["updated_at"] = r["updated_at"].strftime("%Y-%m-%d %H:%M:%S")
         if r.get("last_sent_at") and isinstance(r["last_sent_at"], datetime):
             r["last_sent_at"] = r["last_sent_at"].strftime("%Y-%m-%d %H:%M:%S")
+
+        # Add delivery status from Inbox system (whatsapp_messages table)
+        wamid = r.pop("last_wamid", None)
+        if wamid and wamid in delivery_status_map:
+            r["delivery_status"] = delivery_status_map[wamid]
+        elif r.get("last_sent_at"):
+            r["delivery_status"] = "sent"  # Sent but no status update yet
+        else:
+            r["delivery_status"] = None
 
     return jsonify({
         "success": True,
