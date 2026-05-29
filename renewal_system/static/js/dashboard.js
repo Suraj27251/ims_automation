@@ -272,9 +272,8 @@ function getDeliveryBadge(status) {
     if (!status) return '<small class="text-muted">--</small>';
     switch (status) {
         case 'sent': return '<span class="badge bg-secondary"><i class="bi bi-check"></i> Sent</span>';
-        case 'delivered': return '<span class="badge bg-info text-dark"><i class="bi bi-check2-all"></i> Delivered</span>';
-        case 'received': return '<span class="badge bg-info text-dark"><i class="bi bi-check2-all"></i> Delivered</span>';
-        case 'read': return '<span class="badge bg-success"><i class="bi bi-eye"></i> Read</span>';
+        case 'delivered': return '<span class="badge bg-info"><i class="bi bi-check2-all"></i> Delivered</span>';
+        case 'read': return '<span class="badge bg-primary"><i class="bi bi-eye"></i> Read</span>';
         case 'failed': return '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>';
         default: return `<span class="badge bg-secondary">${status}</span>`;
     }
