@@ -157,36 +157,44 @@ class WhatsAppService:
         This creates/finds a conversation and inserts the message into
         whatsapp_messages so it appears in the Inbox UI. The Inbox webhook
         will then update the status (delivered/read) automatically.
+
+        Note: The Countrylink Inbox stores phone numbers as 10-digit format
+        (without country code prefix), matching their normalize_mobile() logic.
         """
         from renewal_system.models.database import get_db_cursor
 
+        # The Inbox system stores phones as 10 digits (no country code)
+        inbox_mobile = self._normalize_for_inbox(mobile)
+        # The WhatsApp API needs 91-prefixed number
         formatted_mobile = self._format_phone(mobile)
+
         # Build a readable message text for the inbox
         message_text = f"[Template: {template_name}] " + " | ".join(str(p) for p in params)
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
             with get_db_cursor(self.config) as cursor:
-                # Find or create conversation
+                # Find existing conversation using 10-digit format (Inbox standard)
                 cursor.execute(
                     "SELECT id FROM whatsapp_conversations WHERE phone = %s LIMIT 1",
-                    (formatted_mobile,)
+                    (inbox_mobile,)
                 )
                 conversation = cursor.fetchone()
 
                 if conversation:
                     conversation_id = conversation["id"]
                 else:
-                    # Create new conversation
+                    # Create new conversation with 10-digit phone (Inbox standard)
                     cursor.execute("""
                         INSERT INTO whatsapp_conversations (
                             phone, customer_name, last_message, last_message_at,
                             unread_count, ai_enabled, human_takeover, created_at, updated_at
                         ) VALUES (%s, %s, %s, NOW(), 0, 1, 0, NOW(), NOW())
-                    """, (formatted_mobile, formatted_mobile, message_text))
+                    """, (inbox_mobile, inbox_mobile, message_text))
                     conversation_id = cursor.lastrowid
 
                 # Insert message into whatsapp_messages
+                # Use 10-digit phone to match Inbox convention
                 cursor.execute("""
                     INSERT INTO whatsapp_messages (
                         conversation_id, whatsapp_message_id, sender_type, phone,
@@ -196,7 +204,7 @@ class WhatsAppService:
                     conversation_id,
                     message_id,
                     "human",  # sent by operator/system, not AI
-                    formatted_mobile,
+                    inbox_mobile,
                     message_text,
                     "template",
                     None,
@@ -211,8 +219,8 @@ class WhatsAppService:
                     WHERE id = %s
                 """, (message_text, conversation_id))
 
-            logger.info("Synced template to inbox: conversation_id=%s, wamid=%s",
-                        conversation_id, message_id)
+            logger.info("Synced template to inbox: conversation_id=%s, wamid=%s, phone=%s",
+                        conversation_id, message_id, inbox_mobile)
         except Exception as e:
             # Don't fail the send if inbox sync fails — just log it
             logger.warning("Failed to sync template to inbox (non-fatal): %s", e)
@@ -325,6 +333,21 @@ class WhatsAppService:
             return f"91{clean}"
 
         return clean
+
+    def _normalize_for_inbox(self, mobile: str) -> str:
+        """Normalize phone number to 10-digit format for the WhatsApp Inbox system.
+
+        The Countrylink Management System stores phones as 10 digits
+        (without country code), matching their normalize_mobile() logic.
+        """
+        # Remove spaces, dashes, plus signs
+        digits = "".join(ch for ch in str(mobile).strip() if ch.isdigit())
+
+        # Strip 91 prefix if 12 digits (India country code)
+        if len(digits) == 12 and digits.startswith("91"):
+            digits = digits[2:]
+
+        return digits
 
     def get_send_history(self, renewal_id: int) -> list:
         """Get send history for a specific renewal record."""
