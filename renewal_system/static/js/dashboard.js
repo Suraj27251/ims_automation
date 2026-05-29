@@ -362,6 +362,14 @@ function openSendModal(recordId) {
     document.getElementById('param-2').textContent = record.plan_name || '';
     document.getElementById('param-3').textContent = record.expiry_date || '';
 
+    // Hide param-3 row for recharge_today1 (only 2 params)
+    const param3Row = document.getElementById('param-3-row');
+    if (template === 'recharge_today1') {
+        param3Row.style.display = 'none';
+    } else {
+        param3Row.style.display = '';
+    }
+
     // Check if already sent
     const warning = document.getElementById('modal-duplicate-warning');
     if (record.last_sent_at) {
