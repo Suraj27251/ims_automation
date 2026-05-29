@@ -17,15 +17,28 @@ logger = logging.getLogger(__name__)
 
 @webhook_bp.route("/webhook", methods=["GET"])
 def verify_webhook():
-    """Webhook verification (Meta sends GET to verify)."""
+    """Webhook verification (Meta sends GET to verify).
+
+    Meta sends: hub.mode=subscribe, hub.verify_token=<token>, hub.challenge=<int>
+    Must return the challenge value as plain text with 200 status.
+    """
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
 
-    verify_token = current_app.renewal_config.SECRET_KEY
+    verify_token = current_app.renewal_config.WEBHOOK_VERIFY_TOKEN
+
+    logger.info("Webhook verify attempt: mode=%s, token_match=%s, challenge=%s",
+                mode, token == verify_token, challenge)
 
     if mode == "subscribe" and token == verify_token:
-        return challenge, 200
+        # Meta expects the challenge returned as plain text, not JSON
+        from flask import make_response
+        response = make_response(challenge, 200)
+        response.content_type = "text/plain"
+        return response
+
+    logger.warning("Webhook verification failed: mode=%s, token_received=%s", mode, token)
     return "Forbidden", 403
 
 
@@ -56,11 +69,16 @@ def receive_webhook():
                     message_id = status_update.get("id")
                     status = status_update.get("status")  # sent, delivered, read, failed
                     timestamp = status_update.get("timestamp")
+                    # Extract error info for failed messages
+                    errors = status_update.get("errors", [])
+                    error_msg = None
+                    if errors:
+                        error_msg = errors[0].get("title") or errors[0].get("message", "Unknown error")
 
                     if not message_id or not status:
                         continue
 
-                    _update_delivery_status(config, message_id, status, timestamp)
+                    _update_delivery_status(config, message_id, status, timestamp, error_msg)
 
     except Exception as e:
         logger.error("Webhook processing error: %s", e)
@@ -69,7 +87,7 @@ def receive_webhook():
     return jsonify({"status": "ok"}), 200
 
 
-def _update_delivery_status(config, message_id: str, status: str, timestamp: str = None):
+def _update_delivery_status(config, message_id: str, status: str, timestamp: str = None, error_msg: str = None):
     """Update delivery status for a campaign log entry.
 
     Args:
@@ -77,6 +95,7 @@ def _update_delivery_status(config, message_id: str, status: str, timestamp: str
         message_id: WhatsApp message ID (wamid.xxx).
         status: New status (sent, delivered, read, failed).
         timestamp: Unix timestamp from Meta.
+        error_msg: Error message from Meta (for failed status).
     """
     from renewal_system.models.database import get_db_cursor
 
@@ -107,7 +126,8 @@ def _update_delivery_status(config, message_id: str, status: str, timestamp: str
 
         current_priority = status_priority.get(row.get("delivery_status"), -1)
 
-        if new_priority <= current_priority:
+        # Allow failed to override any status, otherwise don't downgrade
+        if status != "failed" and new_priority <= current_priority:
             return  # Don't downgrade status
 
         # Update
@@ -122,6 +142,9 @@ def _update_delivery_status(config, message_id: str, status: str, timestamp: str
             update_params.append(ts)
         elif status == "failed":
             update_fields.append("status = 'failed'")
+            if error_msg:
+                update_fields.append("error_message = %s")
+                update_params.append(error_msg)
 
         update_params.append(row["id"])
 

@@ -67,6 +67,7 @@ class Config:
 
     # App settings
     SECRET_KEY: str = field(default_factory=lambda: os.environ.get("SECRET_KEY", "change-me-in-production"))
+    WEBHOOK_VERIFY_TOKEN: str = field(default_factory=lambda: os.environ.get("WEBHOOK_VERIFY_TOKEN", "") or os.environ.get("SECRET_KEY", "change-me-in-production"))
     DEBUG: bool = field(default_factory=lambda: os.environ.get("DEBUG", "false").lower() == "true")
 
     # Templates mapping

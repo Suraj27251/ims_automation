@@ -102,7 +102,7 @@ def get_renewals():
                     WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
                     ORDER BY sent_at DESC LIMIT 1) as last_template_sent,
                    (SELECT delivery_status FROM whatsapp_campaign_logs wcl
-                    WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
+                    WHERE wcl.renewal_id = r.id
                     ORDER BY sent_at DESC LIMIT 1) as delivery_status
             FROM renewal_records r
             WHERE {where_clause}
@@ -565,3 +565,57 @@ def get_filter_options():
         "zones": zones,
         "plans": plans,
     })
+
+
+@api_bp.route("/delivery-status", methods=["GET"])
+def get_delivery_statuses():
+    """Get latest delivery status for multiple renewal records.
+
+    Used by the frontend to poll/refresh delivery statuses from webhook updates.
+
+    Query params:
+        ids: comma-separated renewal IDs (required)
+    """
+    from renewal_system.models.database import get_db_cursor
+
+    config = current_app.renewal_config
+    ids_param = request.args.get("ids", "")
+
+    if not ids_param:
+        return jsonify({"success": False, "error": "ids parameter required"}), 400
+
+    try:
+        renewal_ids = [int(x.strip()) for x in ids_param.split(",") if x.strip()]
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid ids format"}), 400
+
+    if not renewal_ids or len(renewal_ids) > 200:
+        return jsonify({"success": False, "error": "Provide 1-200 IDs"}), 400
+
+    with get_db_cursor(config) as cursor:
+        placeholders = ",".join(["%s"] * len(renewal_ids))
+        cursor.execute(f"""
+            SELECT renewal_id, delivery_status, whatsapp_message_id,
+                   sent_at, delivered_at, read_at, error_message
+            FROM whatsapp_campaign_logs
+            WHERE renewal_id IN ({placeholders})
+            AND id IN (
+                SELECT MAX(id) FROM whatsapp_campaign_logs
+                WHERE renewal_id IN ({placeholders})
+                GROUP BY renewal_id
+            )
+        """, renewal_ids + renewal_ids)
+        rows = cursor.fetchall()
+
+    statuses = {}
+    for row in rows:
+        rid = row["renewal_id"]
+        statuses[rid] = {
+            "delivery_status": row.get("delivery_status"),
+            "sent_at": row["sent_at"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row.get("sent_at"), datetime) else row.get("sent_at"),
+            "delivered_at": row["delivered_at"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row.get("delivered_at"), datetime) else row.get("delivered_at"),
+            "read_at": row["read_at"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row.get("read_at"), datetime) else row.get("read_at"),
+            "error_message": row.get("error_message"),
+        }
+
+    return jsonify({"success": True, "statuses": statuses})

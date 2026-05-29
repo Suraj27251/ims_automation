@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadRecords();
     loadFilters();
     bindEvents();
+    startStatusPolling();
 });
 
 function bindEvents() {
@@ -280,6 +281,50 @@ function getDeliveryBadge(status) {
 }
 
 // ============================================================
+// Delivery Status Polling
+// ============================================================
+
+let statusPollInterval = null;
+
+function startStatusPolling() {
+    // Poll every 30 seconds for delivery status updates
+    if (statusPollInterval) clearInterval(statusPollInterval);
+    statusPollInterval = setInterval(refreshDeliveryStatuses, 30000);
+}
+
+async function refreshDeliveryStatuses() {
+    // Get IDs of records currently displayed that have been sent
+    const sentIds = state.records
+        .filter(r => r.last_sent_at || r.delivery_status)
+        .map(r => r.id);
+
+    if (sentIds.length === 0) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/delivery-status?ids=${sentIds.join(',')}`);
+        const data = await res.json();
+
+        if (data.success && data.statuses) {
+            let updated = false;
+            for (const record of state.records) {
+                const statusInfo = data.statuses[record.id];
+                if (statusInfo && statusInfo.delivery_status !== record.delivery_status) {
+                    record.delivery_status = statusInfo.delivery_status;
+                    record.last_sent_at = statusInfo.sent_at;
+                    updated = true;
+                }
+            }
+            if (updated) {
+                renderTable(state.records);
+            }
+        }
+    } catch (err) {
+        // Silent fail - don't interrupt user
+        console.debug('Status poll failed:', err);
+    }
+}
+
+// ============================================================
 // Pagination
 // ============================================================
 
@@ -429,6 +474,8 @@ async function confirmSend() {
             bootstrap.Modal.getInstance(document.getElementById('sendModal')).hide();
             loadRecords();
             loadStats();
+            // Refresh delivery statuses after a short delay to catch webhook updates
+            setTimeout(refreshDeliveryStatuses, 5000);
         } else {
             showToast(data.error || 'Failed to send', 'danger');
         }
