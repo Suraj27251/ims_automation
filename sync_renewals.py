@@ -43,8 +43,9 @@ def main():
 
         # Sync from renewals table
         sync_stats = sync_from_renewals_table(config)
-        logger.info("Sync: %d inserted, %d updated, %d total",
-                    sync_stats["inserted"], sync_stats["updated"], sync_stats["total"])
+        logger.info("Sync: %d inserted, %d updated, %d removed, %d total",
+                    sync_stats["inserted"], sync_stats["updated"],
+                    sync_stats.get("removed", 0), sync_stats["total"])
 
         # Re-classify all records
         classify_stats = classify_and_update_records(config)
