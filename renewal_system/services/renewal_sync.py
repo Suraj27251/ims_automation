@@ -32,12 +32,19 @@ def sync_from_renewals_table(config):
     stats = {"inserted": 0, "updated": 0, "total": 0}
 
     with get_db_cursor(config) as cursor:
-        # Fetch all records from the existing renewals table
+        # Fetch only the latest record per user_id from the renewals table.
+        # The renewals table may contain multiple entries per user (different expiry dates).
+        # We want the most recent expiry_date for each user to classify correctly.
         cursor.execute("""
-            SELECT user_id, cust_name, mobile_no, plan_name, amount,
-                   plan_expiry_date, zone_name
-            FROM renewals
-            WHERE plan_expiry_date IS NOT NULL
+            SELECT r.user_id, r.cust_name, r.mobile_no, r.plan_name, r.amount,
+                   r.plan_expiry_date, r.zone_name
+            FROM renewals r
+            INNER JOIN (
+                SELECT user_id, MAX(plan_expiry_date) AS max_expiry
+                FROM renewals
+                WHERE plan_expiry_date IS NOT NULL
+                GROUP BY user_id
+            ) latest ON r.user_id = latest.user_id AND r.plan_expiry_date = latest.max_expiry
         """)
         source_records = cursor.fetchall()
         stats["total"] = len(source_records)
