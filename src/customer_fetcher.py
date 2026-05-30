@@ -84,11 +84,12 @@ class CustomerFetcher:
     ]
 
     def __init__(self, session: requests.Session, base_url: str,
-                 page_size: int = 100, timeout: int = 60):
+                 page_size: int = 100, timeout: int = 60, max_retries: int = 2):
         self.session = session
         self.base_url = base_url.rstrip("/")
-        self.page_size = page_size
+        self.page_size = min(page_size, 100)  # IMS caps at 100 per page
         self.timeout = timeout
+        self.max_retries = max_retries
         self._draw = 0
 
     def open_customer_page(self) -> None:
@@ -133,6 +134,7 @@ class CustomerFetcher:
         """Fetch all customer records from IMS.
 
         Paginates through all pages until all records are retrieved.
+        IMS caps page size at 100, so we paginate in chunks of 100.
 
         Returns:
             List of CustomerRecord objects.
@@ -143,13 +145,28 @@ class CustomerFetcher:
         all_records: List[CustomerRecord] = []
         start = 0
         total = None
+        consecutive_empty = 0
 
         logger.info("Fetching all customers (page_size=%d)", self.page_size)
 
         while True:
             self._draw += 1
             payload = self._build_payload(start)
-            response_data = self._post_request(payload)
+
+            # Retry logic for transient failures
+            response_data = None
+            for attempt in range(self.max_retries + 1):
+                try:
+                    response_data = self._post_request(payload)
+                    break
+                except CustomerFetchError as e:
+                    if attempt < self.max_retries:
+                        logger.warning("Fetch attempt %d failed: %s. Retrying...",
+                                       attempt + 1, e)
+                        import time
+                        time.sleep(2)
+                    else:
+                        raise
 
             # Get total on first page
             if total is None:
@@ -163,8 +180,23 @@ class CustomerFetcher:
             # Parse page data
             page_data = response_data.get("data", [])
             if not page_data:
-                logger.info("Empty page at offset %d, stopping.", start)
-                break
+                consecutive_empty += 1
+                if consecutive_empty >= 2:
+                    logger.info("Two consecutive empty pages at offset %d, stopping.", start)
+                    break
+                # Try next offset in case of a gap
+                start += self.page_size
+                continue
+
+            consecutive_empty = 0
+
+            # Log raw field names from first record for debugging
+            if len(all_records) == 0 and page_data:
+                first_record = page_data[0]
+                logger.info("RAW FIELDS from IMS (first record keys): %s",
+                            list(first_record.keys()))
+                logger.info("RAW FIRST RECORD: %s",
+                            {k: str(v)[:80] for k, v in first_record.items()})
 
             records = self._parse_records(page_data)
             all_records.extend(records)
@@ -277,50 +309,79 @@ class CustomerFetcher:
         return data
 
     def _parse_records(self, data_list: list) -> List[CustomerRecord]:
-        """Parse a list of raw record dicts into CustomerRecord objects."""
+        """Parse a list of raw record dicts into CustomerRecord objects.
+
+        Handles multiple possible field name variations from IMS.
+        """
         records = []
         for item in data_list:
             record = CustomerRecord(
-                user_id=self._clean_str(item.get("UserId")),
-                customer_name=self._clean_str(item.get("CustName")),
-                mobile=self._clean_str(item.get("MobileNo")),
-                plan_name=self._clean_str(item.get("PlanName")),
-                plan_category=self._clean_str(item.get("PlanCategory")),
-                validity=self._clean_str(item.get("Validity")),
-                status=self._clean_str(item.get("Status")),
-                zone_name=self._clean_str(item.get("ZoneName")),
-                area=self._clean_str(item.get("Area")),
-                building=self._clean_str(item.get("Building")),
-                flat_no=self._clean_str(item.get("FlatNo")),
-                address=self._clean_str(item.get("Address")),
-                network_type=self._clean_str(item.get("NetworkType")),
-                connectivity_mode=self._clean_str(item.get("ConnectivityMode")),
-                mac=self._clean_str(item.get("MAC")),
-                mac_free=self._clean_str(item.get("MACFree")),
-                onu_no=self._clean_str(item.get("ONUNo")),
-                static_ip=self._clean_str(item.get("StaticIP")),
-                radius_password=self._clean_str(item.get("RadiusPassword")),
-                email=self._clean_str(item.get("Email")),
-                company_name=self._clean_str(item.get("CompanyName")),
-                owner_tenant=self._clean_str(item.get("OwnerTenant")),
-                payment_id=self._clean_str(item.get("PaymentId")),
-                created_by=self._clean_str(item.get("CreatedBy")),
-                adv_renew=self._clean_str(item.get("AdvRenew")),
-                kyc_approved=self._clean_str(item.get("KYCApproved")),
-                roaming=self._clean_str(item.get("Roaming")),
-                password_plain=self._clean_str(item.get("PasswordPlain")),
-                id_no=self._clean_str(item.get("IdNo")),
+                user_id=self._get_field(item, "UserId", "UserID", "userId", "user_id", "UserName"),
+                customer_name=self._get_field(item, "CustName", "Name", "CustomerName", "custName", "customer_name"),
+                mobile=self._get_field(item, "MobileNo", "Mobile", "mobile", "MobileNumber", "Phone"),
+                plan_name=self._get_field(item, "PlanName", "Plan", "planName", "plan_name"),
+                plan_category=self._get_field(item, "PlanCategory", "Category", "planCategory"),
+                validity=self._get_field(item, "Validity", "validity", "PlanValidity"),
+                status=self._get_field(item, "Status", "status", "UserStatus", "AccountStatus", "IsActive"),
+                zone_name=self._get_field(item, "ZoneName", "Zone", "zoneName", "zone_name"),
+                area=self._get_field(item, "Area", "area", "AreaName"),
+                building=self._get_field(item, "Building", "building", "BuildingName"),
+                flat_no=self._get_field(item, "FlatNo", "flatNo", "Flat", "FlatNumber"),
+                address=self._get_field(item, "Address", "address", "FullAddress"),
+                network_type=self._get_field(item, "NetworkType", "networkType", "Network"),
+                connectivity_mode=self._get_field(item, "ConnectivityMode", "connectivityMode", "Connectivity"),
+                mac=self._get_field(item, "MAC", "Mac", "mac", "MacAddress"),
+                mac_free=self._get_field(item, "MACFree", "MacFree", "macFree"),
+                onu_no=self._get_field(item, "ONUNo", "OnuNo", "ONU", "onuNo"),
+                static_ip=self._get_field(item, "StaticIP", "StaticIp", "staticIp", "IPAddress"),
+                radius_password=self._get_field(item, "RadiusPassword", "radiusPassword", "Password"),
+                email=self._get_field(item, "Email", "email", "EmailId", "EmailAddress"),
+                company_name=self._get_field(item, "CompanyName", "companyName", "Company"),
+                owner_tenant=self._get_field(item, "OwnerTenant", "ownerTenant", "OwnerOrTenant"),
+                payment_id=self._get_field(item, "PaymentId", "paymentId", "PaymentID"),
+                created_by=self._get_field(item, "CreatedBy", "createdBy"),
+                adv_renew=self._get_field(item, "AdvRenew", "advRenew", "AdvanceRenew"),
+                kyc_approved=self._get_field(item, "KYCApproved", "kycApproved", "KYC", "KycStatus"),
+                roaming=self._get_field(item, "Roaming", "roaming"),
+                password_plain=self._get_field(item, "PasswordPlain", "passwordPlain", "PlainPassword"),
+                id_no=self._get_field(item, "IdNo", "idNo", "IDNo", "IdNumber"),
             )
 
-            # Parse date fields
-            record.activation_date = self._parse_date(item.get("ActivationDate"))
-            record.expiry_date = self._parse_date(item.get("PlanExpiryDate"))
-            record.data_reset_date = self._parse_date(item.get("DataResetDate"))
-            record.reg_date = self._parse_date(item.get("RegDate"))
+            # Parse date fields - try multiple possible names
+            record.activation_date = self._parse_date(
+                self._get_field_raw(item, "ActivationDate", "activationDate", "ActivateDate", "StartDate")
+            )
+            record.expiry_date = self._parse_date(
+                self._get_field_raw(item, "PlanExpiryDate", "ExpiryDate", "ExpDate", "expiryDate", "Expiry")
+            )
+            record.data_reset_date = self._parse_date(
+                self._get_field_raw(item, "DataResetDate", "dataResetDate", "ResetDate")
+            )
+            record.reg_date = self._parse_date(
+                self._get_field_raw(item, "RegDate", "regDate", "RegistrationDate", "RegisterDate", "CreatedDate")
+            )
 
             records.append(record)
 
         return records
+
+    def _get_field(self, item: dict, *keys) -> Optional[str]:
+        """Try multiple field names and return the first non-empty value as cleaned string."""
+        for key in keys:
+            val = item.get(key)
+            if val is not None:
+                cleaned = self._clean_str(val)
+                if cleaned:
+                    return cleaned
+        return None
+
+    def _get_field_raw(self, item: dict, *keys):
+        """Try multiple field names and return the first non-None raw value."""
+        for key in keys:
+            val = item.get(key)
+            if val is not None and str(val).strip() and str(val).strip().lower() not in ("null", "none"):
+                return val
+        return None
 
     def _parse_date(self, raw_value) -> Optional[datetime]:
         """Parse a date field - handles ASP.NET /Date()/ format and ISO strings."""
