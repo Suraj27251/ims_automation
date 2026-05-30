@@ -159,6 +159,17 @@ def init_tables(config):
         cursor.execute(WHATSAPP_CAMPAIGN_LOGS_TABLE)
         cursor.execute(OPERATOR_ACTIONS_TABLE)
 
+        # Normalize collation across all tables to avoid mismatch errors
+        tables = ["renewal_records", "whatsapp_campaign_logs", "operator_actions"]
+        for table in tables:
+            try:
+                cursor.execute(f"""
+                    ALTER TABLE {table}
+                    CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
+                """)
+            except Exception:
+                pass  # Table might not exist yet or already correct
+
         # Add delivery_status column if table already exists without it
         try:
             cursor.execute("""

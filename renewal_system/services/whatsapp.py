@@ -175,7 +175,9 @@ class WhatsAppService:
         with get_db_cursor(self.config) as cursor:
             cursor.execute("""
                 SELECT COUNT(*) as cnt FROM whatsapp_campaign_logs
-                WHERE mobile = %s AND template_name = %s AND renewal_id = %s
+                WHERE mobile = %s COLLATE utf8mb4_general_ci
+                AND template_name = %s COLLATE utf8mb4_general_ci
+                AND renewal_id = %s
                 AND status = 'sent' AND sent_at > %s
             """, (mobile, template_name, renewal_id, cutoff))
             result = cursor.fetchone()
