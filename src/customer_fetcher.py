@@ -170,8 +170,12 @@ class CustomerFetcher:
 
             # Get total on first page
             if total is None:
-                total = response_data.get("recordsTotal", 0)
-                logger.info("Total customer records available: %d", total)
+                records_total = response_data.get("recordsTotal", 0)
+                records_filtered = response_data.get("recordsFiltered", 0)
+                # Use the larger value - IMS sometimes reports inconsistent totals
+                total = max(records_total, records_filtered)
+                logger.info("Total customer records: recordsTotal=%d, recordsFiltered=%d, using=%d",
+                            records_total, records_filtered, total)
 
                 if total == 0:
                     logger.warning("IMS reports 0 total customers. Check session/permissions.")
@@ -204,7 +208,14 @@ class CustomerFetcher:
             logger.info("Page offset=%d: %d records (cumulative: %d/%d)",
                         start, len(records), len(all_records), total)
 
-            # Stop when we have all records
+            # Stop conditions:
+            # 1. We got fewer records than page_size (last page)
+            # 2. We have all records based on reported total
+            if len(page_data) < self.page_size:
+                logger.info("Got %d records (less than page_size %d), this is the last page.",
+                            len(page_data), self.page_size)
+                break
+
             if len(all_records) >= total:
                 break
 
@@ -214,7 +225,10 @@ class CustomerFetcher:
         return all_records
 
     def _build_payload(self, start: int) -> dict:
-        """Build DataTables-compatible POST payload for customer listing."""
+        """Build DataTables-compatible POST payload for customer listing.
+
+        Note: IMS may cap page size at 100. We handle this via pagination.
+        """
         payload = {
             "draw": self._draw,
             "start": start,
@@ -223,6 +237,19 @@ class CustomerFetcher:
             "search[regex]": "false",
             "order[0][column]": "0",
             "order[0][dir]": "asc",
+            # Include filter params to ensure no server-side filtering
+            "Zone": "",
+            "Status": "",
+            "UserId": "",
+            "Name": "",
+            "Mobile": "",
+            "Address": "",
+            "MAC": "",
+            "FlatNo": "",
+            "Building": "",
+            "ConnectivityMode": "",
+            "NetworkType": "",
+            "Area": "",
         }
 
         # Column definitions
