@@ -544,6 +544,9 @@ class ConcurrentUserFetcher:
     def fetch_concurrent_user_ids(self) -> List[str]:
         """Fetch all concurrent user IDs from IMS.
 
+        First tries DataTables AJAX. If that fails, falls back to
+        parsing the HTML table directly from the page.
+
         Returns:
             List of user_id strings that are in concurrent state.
         """
@@ -553,17 +556,14 @@ class ConcurrentUserFetcher:
 
         logger.info("Fetching concurrent users (page_size=%d)", self.page_size)
 
-        while True:
-            self._draw += 1
-            payload = self._build_payload(start)
+        # Try AJAX first
+        self._draw += 1
+        payload = self._build_payload(start)
 
-            try:
-                response_data = self._post_request(payload)
-            except CustomerFetchError as e:
-                logger.error("Failed to fetch concurrent users: %s", e)
-                break
+        try:
+            response_data = self._post_request(payload)
 
-            # Get total on first page
+            # If we got here, AJAX worked
             if total is None:
                 records_total = response_data.get("recordsTotal", 0)
                 records_filtered = response_data.get("recordsFiltered", 0)
@@ -571,45 +571,116 @@ class ConcurrentUserFetcher:
                 logger.info("Total concurrent users: recordsTotal=%d, recordsFiltered=%d, using=%d",
                             records_total, records_filtered, total)
 
-                if total == 0:
-                    break
-
-            # Parse page data
             page_data = response_data.get("data", [])
-            if not page_data:
-                break
-
-            # Log first record for debugging
-            if len(all_user_ids) == 0 and page_data:
+            if page_data:
                 logger.info("Concurrent RAW FIELDS: %s", list(page_data[0].keys()))
-                logger.info("Concurrent RAW FIRST RECORD: %s",
-                            {k: str(v)[:60] for k, v in page_data[0].items()})
+                for item in page_data:
+                    user_id = (
+                        item.get("UserId") or item.get("UserID") or
+                        item.get("userId") or item.get("UserName") or
+                        item.get("user_id")
+                    )
+                    if user_id:
+                        uid = str(user_id).strip()
+                        if uid and uid.lower() not in ("null", "none"):
+                            all_user_ids.append(uid)
 
-            # Extract user IDs
-            for item in page_data:
-                user_id = (
-                    item.get("UserId") or item.get("UserID") or
-                    item.get("userId") or item.get("UserName") or
-                    item.get("user_id")
-                )
-                if user_id:
-                    uid = str(user_id).strip()
-                    if uid and uid.lower() not in ("null", "none"):
-                        all_user_ids.append(uid)
+                # Paginate if needed
+                while len(all_user_ids) < total and len(page_data) >= self.page_size:
+                    start += self.page_size
+                    self._draw += 1
+                    payload = self._build_payload(start)
+                    response_data = self._post_request(payload)
+                    page_data = response_data.get("data", [])
+                    if not page_data:
+                        break
+                    for item in page_data:
+                        user_id = (
+                            item.get("UserId") or item.get("UserID") or
+                            item.get("userId") or item.get("UserName")
+                        )
+                        if user_id:
+                            uid = str(user_id).strip()
+                            if uid and uid.lower() not in ("null", "none"):
+                                all_user_ids.append(uid)
 
-            logger.info("Concurrent page offset=%d: %d users (cumulative: %d/%d)",
-                        start, len(page_data), len(all_user_ids), total)
-
-            # Stop if last page
-            if len(page_data) < self.page_size:
-                break
-            if len(all_user_ids) >= total:
-                break
-
-            start += self.page_size
+        except CustomerFetchError:
+            # AJAX failed - fall back to HTML parsing
+            logger.info("AJAX fetch failed, falling back to HTML table parsing...")
+            all_user_ids = self._parse_concurrent_from_html()
 
         logger.info("Concurrent fetch complete: %d user IDs", len(all_user_ids))
         return all_user_ids
+
+    def _parse_concurrent_from_html(self) -> List[str]:
+        """Parse concurrent user IDs directly from the HTML page.
+
+        Fallback when the AJAX endpoint doesn't return JSON.
+        """
+        url = f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive"
+
+        try:
+            response = self.session.get(url, timeout=self.timeout, headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Referer": f"{self.base_url}/Dashboard/Index",
+            })
+        except requests.RequestException as e:
+            logger.error("Failed to fetch concurrent HTML page: %s", e)
+            return []
+
+        if response.status_code != 200:
+            logger.error("Concurrent HTML page returned %d", response.status_code)
+            return []
+
+        # Parse HTML table using BeautifulSoup
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            user_ids = []
+
+            # Find the DataTable - look for table with user data
+            table = soup.find("table", {"class": "dataTable"}) or soup.find("table", {"id": lambda x: x and "datatable" in x.lower()}) if soup else None
+
+            if not table:
+                # Try finding any table with user IDs
+                tables = soup.find_all("table")
+                for t in tables:
+                    rows = t.find_all("tr")
+                    if len(rows) > 1:  # Has data rows
+                        # Check if first data row looks like user data
+                        first_row_text = rows[1].get_text() if len(rows) > 1 else ""
+                        if any(c.isdigit() for c in first_row_text):
+                            table = t
+                            break
+
+            if table:
+                rows = table.find_all("tr")
+                for row in rows[1:]:  # Skip header
+                    cells = row.find_all("td")
+                    if cells and len(cells) >= 1:
+                        # User Id is typically the first meaningful column
+                        # Check first few cells for something that looks like a user ID
+                        for cell in cells[:3]:
+                            text = cell.get_text(strip=True)
+                            if text and text not in ("...", "", "---") and len(text) < 50:
+                                # User IDs in IMS are like "pn_minaz", "v_kishori", etc.
+                                if not text.startswith("http") and not text.startswith("<"):
+                                    user_ids.append(text)
+                                    break
+
+                logger.info("Parsed %d concurrent user IDs from HTML table", len(user_ids))
+            else:
+                logger.warning("Could not find data table in concurrent page HTML")
+
+            return user_ids
+
+        except ImportError:
+            logger.error("BeautifulSoup not available for HTML parsing")
+            return []
+        except Exception as e:
+            logger.error("Error parsing concurrent HTML: %s", e)
+            return []
 
     def _build_payload(self, start: int) -> dict:
         """Build DataTables POST payload for concurrent users."""
