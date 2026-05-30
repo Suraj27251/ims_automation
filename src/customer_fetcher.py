@@ -446,3 +446,211 @@ class CustomerFetcher:
         if not s or s.lower() in ("null", "none"):
             return None
         return s
+
+
+class ConcurrentUserFetcher:
+    """Fetches concurrent (inactive but connected) users from IMS.
+
+    These are users who appear on the Dashboard/UserDataConcurrent page.
+    They are technically inactive (not renewed) but still using the network.
+
+    URL: /Dashboard/UserDataConcurrent?StatusName=Inactive
+    """
+
+    PAGE_URL = "/Dashboard/UserDataConcurrent"
+    ENDPOINT = "/Dashboard/UserDataConcurrent/GetData"
+
+    def __init__(self, session: requests.Session, base_url: str,
+                 page_size: int = 100, timeout: int = 60):
+        self.session = session
+        self.base_url = base_url.rstrip("/")
+        self.page_size = min(page_size, 100)
+        self.timeout = timeout
+        self._draw = 0
+
+    def open_concurrent_page(self) -> None:
+        """Navigate to the concurrent users page to establish session context."""
+        url = f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive"
+        logger.info("Opening concurrent users page: %s", url)
+
+        try:
+            response = self.session.get(
+                url,
+                timeout=self.timeout,
+                headers={
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Referer": f"{self.base_url}/Dashboard/Index",
+                },
+            )
+        except requests.RequestException as e:
+            raise CustomerFetchError(f"Failed to open concurrent page: {e}") from e
+
+        final_url = (response.url or "").lower()
+        if "/admin" in final_url and "dashboard" not in final_url:
+            raise CustomerFetchError(
+                f"Concurrent page redirected to login: {response.url}. "
+                f"Session is not authenticated."
+            )
+
+        if response.status_code != 200:
+            raise CustomerFetchError(
+                f"Concurrent page returned HTTP {response.status_code}"
+            )
+
+        logger.info("Concurrent users page loaded: status=%d", response.status_code)
+
+    def fetch_concurrent_user_ids(self) -> List[str]:
+        """Fetch all concurrent user IDs from IMS.
+
+        Returns:
+            List of user_id strings that are in concurrent state.
+        """
+        all_user_ids: List[str] = []
+        start = 0
+        total = None
+
+        logger.info("Fetching concurrent users (page_size=%d)", self.page_size)
+
+        while True:
+            self._draw += 1
+            payload = self._build_payload(start)
+
+            try:
+                response_data = self._post_request(payload)
+            except CustomerFetchError as e:
+                logger.error("Failed to fetch concurrent users: %s", e)
+                break
+
+            # Get total on first page
+            if total is None:
+                records_total = response_data.get("recordsTotal", 0)
+                records_filtered = response_data.get("recordsFiltered", 0)
+                total = max(records_total, records_filtered)
+                logger.info("Total concurrent users: recordsTotal=%d, recordsFiltered=%d, using=%d",
+                            records_total, records_filtered, total)
+
+                if total == 0:
+                    break
+
+            # Parse page data
+            page_data = response_data.get("data", [])
+            if not page_data:
+                break
+
+            # Log first record for debugging
+            if len(all_user_ids) == 0 and page_data:
+                logger.info("Concurrent RAW FIELDS: %s", list(page_data[0].keys()))
+                logger.info("Concurrent RAW FIRST RECORD: %s",
+                            {k: str(v)[:60] for k, v in page_data[0].items()})
+
+            # Extract user IDs
+            for item in page_data:
+                user_id = (
+                    item.get("UserId") or item.get("UserID") or
+                    item.get("userId") or item.get("UserName") or
+                    item.get("user_id")
+                )
+                if user_id:
+                    uid = str(user_id).strip()
+                    if uid and uid.lower() not in ("null", "none"):
+                        all_user_ids.append(uid)
+
+            logger.info("Concurrent page offset=%d: %d users (cumulative: %d/%d)",
+                        start, len(page_data), len(all_user_ids), total)
+
+            # Stop if last page
+            if len(page_data) < self.page_size:
+                break
+            if len(all_user_ids) >= total:
+                break
+
+            start += self.page_size
+
+        logger.info("Concurrent fetch complete: %d user IDs", len(all_user_ids))
+        return all_user_ids
+
+    def _build_payload(self, start: int) -> dict:
+        """Build DataTables POST payload for concurrent users."""
+        payload = {
+            "draw": self._draw,
+            "start": start,
+            "length": self.page_size,
+            "search[value]": "",
+            "search[regex]": "false",
+            "order[0][column]": "0",
+            "order[0][dir]": "asc",
+            "StatusName": "Inactive",
+        }
+
+        # Columns visible on the concurrent page
+        columns = ["UserId", "PlanName", "IPAddress", "NAS", "ZoneName", "CallerId", "UpTime"]
+        for idx, col in enumerate(columns):
+            payload[f"columns[{idx}][data]"] = col
+            payload[f"columns[{idx}][name]"] = col
+            payload[f"columns[{idx}][searchable]"] = "true"
+            payload[f"columns[{idx}][orderable]"] = "true"
+            payload[f"columns[{idx}][search][value]"] = ""
+            payload[f"columns[{idx}][search][regex]"] = "false"
+
+        return payload
+
+    def _post_request(self, payload: dict) -> dict:
+        """Send POST request to concurrent GetData endpoint."""
+        # Try multiple possible endpoint patterns
+        endpoints_to_try = [
+            f"{self.base_url}{self.ENDPOINT}/GetData",
+            f"{self.base_url}{self.ENDPOINT}",
+            f"{self.base_url}/Dashboard/GetUserDataConcurrent",
+        ]
+
+        url = f"{self.base_url}{self.PAGE_URL}"
+
+        headers = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Referer": f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive",
+        }
+
+        logger.debug("POST %s (draw=%d, start=%d)", url, payload.get("draw"), payload.get("start"))
+
+        # Try the main URL first (page URL often doubles as the AJAX endpoint)
+        try:
+            response = self.session.post(url, data=payload, headers=headers, timeout=self.timeout)
+        except requests.RequestException as e:
+            raise CustomerFetchError(f"Network error fetching concurrent data: {e}") from e
+
+        # If we got HTML back, try alternate endpoints
+        content_type = response.headers.get("Content-Type", "")
+        if "json" not in content_type.lower() and response.status_code == 200:
+            for alt_url in endpoints_to_try:
+                try:
+                    response = self.session.post(alt_url, data=payload, headers=headers, timeout=self.timeout)
+                    content_type = response.headers.get("Content-Type", "")
+                    if "json" in content_type.lower():
+                        logger.info("Concurrent endpoint found: %s", alt_url)
+                        break
+                except requests.RequestException:
+                    continue
+
+        if response.status_code != 200:
+            raise CustomerFetchError(
+                f"Concurrent API returned HTTP {response.status_code}. "
+                f"Body: {response.text[:300]}"
+            )
+
+        content_type = response.headers.get("Content-Type", "")
+        if "json" not in content_type.lower():
+            raise CustomerFetchError(
+                f"Concurrent API returned non-JSON (Content-Type: {content_type}). "
+                f"Body: {response.text[:300]}"
+            )
+
+        try:
+            data = response.json()
+        except (json.JSONDecodeError, ValueError) as e:
+            raise CustomerFetchError(
+                f"Invalid JSON from concurrent endpoint: {e}"
+            ) from e
+
+        return data
