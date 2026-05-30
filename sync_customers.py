@@ -254,8 +254,21 @@ def main() -> int:
         logger.info("Step 5: Fetching concurrent (inactive but connected) users...")
         from src.customer_fetcher import ConcurrentUserFetcher
 
+        # Re-login for concurrent page (IMS session may expire after bulk fetch)
+        try:
+            auth2 = IMSAuth(
+                base_url=env["IMS_BASE_URL"],
+                username=env["IMS_USERNAME"],
+                password=env["IMS_PASSWORD"],
+            )
+            auth2.login()
+            logger.info("Re-authenticated for concurrent fetch.")
+        except AuthError as e:
+            logger.warning("Re-auth failed for concurrent fetch: %s", e)
+            return 0  # Main sync already succeeded
+
         concurrent_fetcher = ConcurrentUserFetcher(
-            session=auth.session,
+            session=auth2.session,
             base_url=env["IMS_BASE_URL"],
             page_size=100,
         )
