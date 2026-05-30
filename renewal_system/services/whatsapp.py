@@ -127,6 +127,29 @@ class WhatsAppService:
                            "failed", None, operator_name, str(e))
             raise WhatsAppError(f"API request failed: {e}") from e
 
+        # Log full request/response for debugging
+        logger.info("WhatsApp API request: template=%s, to=%s, language=%s, params=%s",
+                    template_name, formatted_mobile, language_code, expected_params)
+        logger.info("WhatsApp API response: status=%d, body=%s",
+                    response.status_code, json.dumps(response_data)[:500])
+
+        # If failed with language code issue, retry with alternate language code
+        if response.status_code not in (200, 201):
+            error_data = response_data.get("error", {})
+            error_code = error_data.get("code", 0)
+            # Error 100 = Invalid parameter - could be language mismatch
+            if error_code == 100:
+                alt_language = "en" if language_code == "en_US" else "en_US"
+                logger.info("Retrying with alternate language code: %s", alt_language)
+                payload["template"]["language"]["code"] = alt_language
+                try:
+                    response = requests.post(url, headers=headers, json=payload, timeout=30)
+                    response_data = response.json()
+                    logger.info("Retry response: status=%d, body=%s",
+                                response.status_code, json.dumps(response_data)[:500])
+                except requests.RequestException as e:
+                    pass  # Fall through to original error handling
+
         # Process response
         if response.status_code in (200, 201):
             message_id = response_data.get("messages", [{}])[0].get("id", "")
