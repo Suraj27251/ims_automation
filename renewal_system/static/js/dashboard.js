@@ -26,7 +26,7 @@ let state = {
 const TEMPLATE_MAP = {
     expired: 'pack_expiry_alert',
     today: 'recharge_today1',
-    upcoming: 'recharge_reminder',
+    upcoming: 'expiry_to_date',
 };
 
 // ============================================================
@@ -215,7 +215,7 @@ function renderTable(records) {
     tbody.innerHTML = records.map(r => {
         const isSelected = state.selectedIds.has(r.id);
         const badge = getCategoryBadge(r.category);
-        const template = TEMPLATE_MAP[r.category] || 'recharge_reminder';
+        const template = TEMPLATE_MAP[r.category] || 'expiry_to_date';
         const daysText = getDaysText(r.days_remaining);
 
         return `
@@ -399,7 +399,7 @@ function openSendModal(recordId) {
     document.getElementById('modal-mobile').textContent = record.mobile || '--';
 
     // Set template based on category
-    const template = TEMPLATE_MAP[record.category] || 'recharge_reminder';
+    const template = TEMPLATE_MAP[record.category] || 'expiry_to_date';
     document.getElementById('modal-template').value = template;
 
     // Auto-fill params based on category

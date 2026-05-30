@@ -31,7 +31,7 @@ CATEGORIES = {
     "upcoming": {
         "label": "Upcoming",
         "badge": "🟢 UPCOMING",
-        "template": "recharge_reminder",
+        "template": "expiry_to_date",
         "color": "success",
     },
 }

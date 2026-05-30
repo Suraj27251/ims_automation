@@ -73,7 +73,7 @@ class Config:
     TEMPLATE_MAP: dict = field(default_factory=lambda: {
         "expired": "pack_expiry_alert",
         "today": "recharge_today1",
-        "upcoming": "recharge_reminder",
+        "upcoming": "expiry_to_date",
     })
 
 

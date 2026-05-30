@@ -32,12 +32,17 @@ class WhatsAppService:
             # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
         },
         "recharge_today1": {
-            "language": "en_US",
+            "language": "en",
             "param_count": 2,
             # {{1}} = name, {{2}} = plan_name
         },
         "recharge_reminder": {
-            "language": "en_US",
+            "language": "en",
+            "param_count": 3,
+            # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
+        },
+        "expiry_to_date": {
+            "language": "en",
             "param_count": 3,
             # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
         },

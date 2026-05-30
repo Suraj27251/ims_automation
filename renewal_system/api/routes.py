@@ -352,7 +352,7 @@ def bulk_send():
         # Build params based on template requirements
         # recharge_today1: {{1}}=name, {{2}}=plan_name
         # pack_expiry_alert: {{1}}=name, {{2}}=plan_name, {{3}}=expiry_date
-        # recharge_reminder: {{1}}=name, {{2}}=plan_name, {{3}}=expiry_date
+        # expiry_to_date: {{1}}=name, {{2}}=plan_name, {{3}}=expiry_date
         if template_name == "recharge_today1":
             params = [
                 record.get("customer_name", "Customer"),
