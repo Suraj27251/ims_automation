@@ -250,46 +250,6 @@ def main() -> int:
         logger.info("  Unchanged:      %d", sync_stats["unchanged"])
         logger.info("=" * 60)
 
-        # --- Step 5: Fetch and mark concurrent users ---
-        logger.info("Step 5: Fetching concurrent (inactive but connected) users...")
-        from src.customer_fetcher import ConcurrentUserFetcher
-
-        # Re-login for concurrent page (IMS session may expire after bulk fetch)
-        try:
-            auth2 = IMSAuth(
-                base_url=env["IMS_BASE_URL"],
-                username=env["IMS_USERNAME"],
-                password=env["IMS_PASSWORD"],
-            )
-            auth2.login()
-            logger.info("Re-authenticated for concurrent fetch.")
-        except AuthError as e:
-            logger.warning("Re-auth failed for concurrent fetch: %s", e)
-            return 0  # Main sync already succeeded
-
-        concurrent_fetcher = ConcurrentUserFetcher(
-            session=auth2.session,
-            base_url=env["IMS_BASE_URL"],
-            page_size=100,
-        )
-
-        try:
-            concurrent_fetcher.open_concurrent_page()
-            concurrent_ids = concurrent_fetcher.fetch_concurrent_user_ids()
-
-            if concurrent_ids:
-                # Reset previous concurrent tags, then re-apply
-                repo.reset_concurrent_status()
-                marked = repo.mark_concurrent_users(concurrent_ids)
-                logger.info("Concurrent users: %d found, %d marked in DB",
-                            len(concurrent_ids), marked)
-            else:
-                logger.info("No concurrent users found.")
-
-        except CustomerFetchError as e:
-            logger.warning("Concurrent user fetch failed (non-fatal): %s", e)
-            # Don't fail the whole sync for this
-
         return 0
 
     except Exception as e:

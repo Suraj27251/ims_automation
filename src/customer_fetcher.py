@@ -338,110 +338,85 @@ class CustomerFetcher:
     def _parse_records(self, data_list: list) -> List[CustomerRecord]:
         """Parse a list of raw record dicts into CustomerRecord objects.
 
-        Field mapping based on actual IMS response:
-        - UserId: user ID
-        - FirstName: customer name (IMS uses FirstName, not CustName)
-        - StatusName: Active/Inactive (human-readable)
-        - StatusId: 1=Active, 2=Inactive
-        - IsActive: 0/1
-        - CurrentStatus: 0/1
-        - PlanName: plan name
-        - PlanCategory: Unlimited/FUP etc
-        - BillingcycName: Monthly/Quarterly/Semi-Annually (validity)
-        - ZoneName: zone
-        - AreaName: area
-        - BuildingName: building
-        - FlatNo: flat number
-        - Address: address
-        - MobileNo: mobile
-        - Email: email
-        - MACID: MAC address
-        - MACFree: MAC free flag
-        - ONUNo: ONU number
-        - StaticIP: static IP
-        - RadiusPassword: radius password
-        - NetworkType: PPPOE etc
-        - FiberName: FTTH etc (connectivity mode)
-        - OwnerORTenant: owner/tenant
-        - CompanyName: company
-        - KYCApproved: 0/1
-        - Roaming: 0/1
-        - Password: plain password
-        - IdNo: ID number
-        - PayUserId: payment ID
-        - CreatedByName: created by
-        - IsAdv: advance renew flag
+        Handles multiple possible field name variations from IMS.
         """
         records = []
         for item in data_list:
-            # Determine status: use StatusName if available, else derive from IsActive
-            status_name = item.get("StatusName")
-            if status_name:
-                status = str(status_name).strip()
-            else:
-                is_active = item.get("IsActive", item.get("CurrentStatus", ""))
-                status = "Active" if str(is_active) == "1" else "Inactive"
-
             record = CustomerRecord(
-                user_id=self._clean_str(item.get("UserId")),
-                customer_name=self._clean_str(
-                    item.get("FirstName") or item.get("CustName") or item.get("Name")
-                ),
-                mobile=self._clean_str(item.get("MobileNo") or item.get("Mobile")),
-                plan_name=self._clean_str(item.get("PlanName")),
-                plan_category=self._clean_str(item.get("PlanCategory")),
-                validity=self._clean_str(item.get("BillingcycName") or item.get("Validity")),
-                status=status,
-                zone_name=self._clean_str(item.get("ZoneName")),
-                area=self._clean_str(item.get("AreaName") or item.get("Area")),
-                building=self._clean_str(item.get("BuildingName") or item.get("Building")),
-                flat_no=self._clean_str(item.get("FlatNo")),
-                address=self._clean_str(item.get("Address")),
-                network_type=self._clean_str(item.get("NetworkType")),
-                connectivity_mode=self._clean_str(item.get("FiberName") or item.get("ConnectivityMode")),
-                mac=self._clean_str(item.get("MACID") or item.get("MAC")),
-                mac_free=self._clean_str(item.get("MACFree")),
-                onu_no=self._clean_str(item.get("ONUNo")),
-                static_ip=self._clean_str(item.get("StaticIP")),
-                radius_password=self._clean_str(item.get("RadiusPassword")),
-                email=self._clean_str(item.get("Email")),
-                company_name=self._clean_str(item.get("CompanyName")),
-                owner_tenant=self._clean_str(item.get("OwnerORTenant") or item.get("OwnerTenant")),
-                payment_id=self._clean_str(item.get("PayUserId") or item.get("PaymentId")),
-                created_by=self._clean_str(item.get("CreatedByName") or item.get("CreatedBy")),
-                adv_renew=self._clean_str(item.get("IsAdv") or item.get("AdvRenew")),
-                kyc_approved=self._clean_str(item.get("KYCApproved")),
-                roaming=self._clean_str(item.get("Roaming")),
-                password_plain=self._clean_str(item.get("Password") or item.get("PasswordPlain")),
-                id_no=self._clean_str(item.get("IdNo")),
+                user_id=self._get_field(item, "UserId", "UserID", "userId", "user_id", "UserName"),
+                customer_name=self._get_field(item, "CustName", "Name", "CustomerName", "custName", "customer_name"),
+                mobile=self._get_field(item, "MobileNo", "Mobile", "mobile", "MobileNumber", "Phone"),
+                plan_name=self._get_field(item, "PlanName", "Plan", "planName", "plan_name"),
+                plan_category=self._get_field(item, "PlanCategory", "Category", "planCategory"),
+                validity=self._get_field(item, "Validity", "validity", "PlanValidity"),
+                status=self._get_field(item, "Status", "status", "UserStatus", "AccountStatus", "IsActive"),
+                zone_name=self._get_field(item, "ZoneName", "Zone", "zoneName", "zone_name"),
+                area=self._get_field(item, "Area", "area", "AreaName"),
+                building=self._get_field(item, "Building", "building", "BuildingName"),
+                flat_no=self._get_field(item, "FlatNo", "flatNo", "Flat", "FlatNumber"),
+                address=self._get_field(item, "Address", "address", "FullAddress"),
+                network_type=self._get_field(item, "NetworkType", "networkType", "Network"),
+                connectivity_mode=self._get_field(item, "ConnectivityMode", "connectivityMode", "Connectivity"),
+                mac=self._get_field(item, "MAC", "Mac", "mac", "MacAddress"),
+                mac_free=self._get_field(item, "MACFree", "MacFree", "macFree"),
+                onu_no=self._get_field(item, "ONUNo", "OnuNo", "ONU", "onuNo"),
+                static_ip=self._get_field(item, "StaticIP", "StaticIp", "staticIp", "IPAddress"),
+                radius_password=self._get_field(item, "RadiusPassword", "radiusPassword", "Password"),
+                email=self._get_field(item, "Email", "email", "EmailId", "EmailAddress"),
+                company_name=self._get_field(item, "CompanyName", "companyName", "Company"),
+                owner_tenant=self._get_field(item, "OwnerTenant", "ownerTenant", "OwnerOrTenant"),
+                payment_id=self._get_field(item, "PaymentId", "paymentId", "PaymentID"),
+                created_by=self._get_field(item, "CreatedBy", "createdBy"),
+                adv_renew=self._get_field(item, "AdvRenew", "advRenew", "AdvanceRenew"),
+                kyc_approved=self._get_field(item, "KYCApproved", "kycApproved", "KYC", "KycStatus"),
+                roaming=self._get_field(item, "Roaming", "roaming"),
+                password_plain=self._get_field(item, "PasswordPlain", "passwordPlain", "PlainPassword"),
+                id_no=self._get_field(item, "IdNo", "idNo", "IDNo", "IdNumber"),
             )
 
-            # Parse date fields using actual IMS field names
+            # Parse date fields - try multiple possible names
             record.activation_date = self._parse_date(
-                item.get("ActivationDateS") or item.get("PlanActivationDateS")
+                self._get_field_raw(item, "ActivationDate", "activationDate", "ActivateDate", "StartDate")
             )
             record.expiry_date = self._parse_date(
-                item.get("PlanExpiryDate") or item.get("PlanExpiryDateS") or item.get("PlanExpiryDateNew")
+                self._get_field_raw(item, "PlanExpiryDate", "ExpiryDate", "ExpDate", "expiryDate", "Expiry")
             )
-            record.data_reset_date = self._parse_date(item.get("DataResetDate"))
+            record.data_reset_date = self._parse_date(
+                self._get_field_raw(item, "DataResetDate", "dataResetDate", "ResetDate")
+            )
             record.reg_date = self._parse_date(
-                item.get("CreatedDate") or item.get("CreatedDateS")
+                self._get_field_raw(item, "RegDate", "regDate", "RegistrationDate", "RegisterDate", "CreatedDate")
             )
 
             records.append(record)
 
         return records
 
-    def _parse_date(self, raw_value) -> Optional[datetime]:
-        """Parse a date field - handles ASP.NET /Date()/ format and ISO strings.
+    def _get_field(self, item: dict, *keys) -> Optional[str]:
+        """Try multiple field names and return the first non-empty value as cleaned string."""
+        for key in keys:
+            val = item.get(key)
+            if val is not None:
+                cleaned = self._clean_str(val)
+                if cleaned:
+                    return cleaned
+        return None
 
-        Handles negative timestamps and out-of-range dates gracefully.
-        """
+    def _get_field_raw(self, item: dict, *keys):
+        """Try multiple field names and return the first non-None raw value."""
+        for key in keys:
+            val = item.get(key)
+            if val is not None and str(val).strip() and str(val).strip().lower() not in ("null", "none"):
+                return val
+        return None
+
+    def _parse_date(self, raw_value) -> Optional[datetime]:
+        """Parse a date field - handles ASP.NET /Date()/ format and ISO strings."""
         if not raw_value:
             return None
 
         raw_str = str(raw_value).strip()
-        if not raw_str or raw_str.lower() in ("null", "none", "", "no data"):
+        if not raw_str or raw_str.lower() in ("null", "none", ""):
             return None
 
         # ASP.NET /Date(...)/ format
@@ -449,24 +424,7 @@ class CustomerFetcher:
             try:
                 return parse_aspnet_date(raw_str)
             except (ValueError, TypeError):
-                # Try manual parsing for out-of-range dates
-                import re
-                match = re.match(r'^/Date\((-?\d+)([+-]\d{4})?\)/$', raw_str)
-                if match:
-                    timestamp_ms = int(match.group(1))
-                    # Skip negative timestamps (invalid/placeholder dates)
-                    if timestamp_ms < 0:
-                        return None
-                    # Try converting even if outside the strict 2000-2100 range
-                    try:
-                        from datetime import timezone
-                        dt = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=timezone.utc)
-                        # Only accept reasonable dates (2000-2100)
-                        if dt.year < 2000 or dt.year > 2100:
-                            return None
-                        return dt
-                    except (OSError, OverflowError, ValueError):
-                        return None
+                logger.debug("Failed to parse ASP.NET date: %s", raw_str)
                 return None
 
         # ISO format fallback
@@ -481,290 +439,10 @@ class CustomerFetcher:
 
     @staticmethod
     def _clean_str(value) -> Optional[str]:
-        """Clean a string value - return None for empty/null/placeholder values."""
+        """Clean a string value - return None for empty/null values."""
         if value is None:
             return None
         s = str(value).strip()
-        if not s or s.lower() in ("null", "none", "no data"):
+        if not s or s.lower() in ("null", "none"):
             return None
         return s
-
-
-class ConcurrentUserFetcher:
-    """Fetches concurrent (inactive but connected) users from IMS.
-
-    These are users who appear on the Dashboard/UserDataConcurrent page.
-    They are technically inactive (not renewed) but still using the network.
-
-    URL: /Dashboard/UserDataConcurrent?StatusName=Inactive
-    """
-
-    PAGE_URL = "/Dashboard/UserDataConcurrent"
-    ENDPOINT = "/Dashboard/GetUserConcurrentData"
-
-    def __init__(self, session: requests.Session, base_url: str,
-                 page_size: int = 100, timeout: int = 60):
-        self.session = session
-        self.base_url = base_url.rstrip("/")
-        self.page_size = min(page_size, 100)
-        self.timeout = timeout
-        self._draw = 0
-
-    def open_concurrent_page(self) -> None:
-        """Navigate to the concurrent users page to establish session context.
-
-        Must first visit the Dashboard to fully establish the session,
-        then navigate to the concurrent page.
-        """
-        # First, follow the login redirect to Dashboard (establishes full session)
-        dashboard_url = f"{self.base_url}/Dashboard/Index"
-        logger.info("Visiting dashboard first: %s", dashboard_url)
-
-        try:
-            dash_resp = self.session.get(dashboard_url, timeout=self.timeout, headers={
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            })
-            logger.debug("Dashboard: status=%d, url=%s", dash_resp.status_code, dash_resp.url)
-        except requests.RequestException as e:
-            logger.warning("Dashboard visit failed: %s", e)
-
-        # Now visit the concurrent page
-        url = f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive"
-        logger.info("Opening concurrent users page: %s", url)
-
-        try:
-            response = self.session.get(
-                url,
-                timeout=self.timeout,
-                headers={
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Referer": dashboard_url,
-                },
-            )
-        except requests.RequestException as e:
-            raise CustomerFetchError(f"Failed to open concurrent page: {e}") from e
-
-        final_url = (response.url or "").lower()
-        if "/admin" in final_url and "dashboard" not in final_url and "concurrent" not in final_url:
-            raise CustomerFetchError(
-                f"Concurrent page redirected to login: {response.url}. "
-                f"Session may lack permission for this page."
-            )
-
-        if response.status_code != 200:
-            raise CustomerFetchError(
-                f"Concurrent page returned HTTP {response.status_code}"
-            )
-
-        # Store the page content for HTML fallback parsing
-        self._page_html = response.text
-        self._page_size = len(response.text)
-
-        logger.info("Concurrent users page loaded: status=%d, size=%d, url=%s",
-                    response.status_code, len(response.text), response.url)
-
-    def fetch_concurrent_user_ids(self) -> List[str]:
-        """Fetch all concurrent user IDs from IMS.
-
-        First tries DataTables AJAX. If that fails, falls back to
-        parsing the HTML table directly from the page.
-
-        Returns:
-            List of user_id strings that are in concurrent state.
-        """
-        all_user_ids: List[str] = []
-        start = 0
-        total = None
-
-        logger.info("Fetching concurrent users (page_size=%d)", self.page_size)
-
-        # Try AJAX first
-        self._draw += 1
-        payload = self._build_payload(start)
-
-        try:
-            response_data = self._post_request(payload)
-
-            # If we got here, AJAX worked
-            if total is None:
-                records_total = response_data.get("recordsTotal", 0)
-                records_filtered = response_data.get("recordsFiltered", 0)
-                total = max(records_total, records_filtered)
-                logger.info("Total concurrent users: recordsTotal=%d, recordsFiltered=%d, using=%d",
-                            records_total, records_filtered, total)
-
-            page_data = response_data.get("data", [])
-            if page_data:
-                logger.info("Concurrent RAW FIELDS: %s", list(page_data[0].keys()))
-                for item in page_data:
-                    user_id = (
-                        item.get("UserId") or item.get("UserID") or
-                        item.get("userId") or item.get("UserName") or
-                        item.get("user_id")
-                    )
-                    if user_id:
-                        uid = str(user_id).strip()
-                        if uid and uid.lower() not in ("null", "none"):
-                            all_user_ids.append(uid)
-
-                # Paginate if needed
-                while len(all_user_ids) < total and len(page_data) >= self.page_size:
-                    start += self.page_size
-                    self._draw += 1
-                    payload = self._build_payload(start)
-                    response_data = self._post_request(payload)
-                    page_data = response_data.get("data", [])
-                    if not page_data:
-                        break
-                    for item in page_data:
-                        user_id = (
-                            item.get("UserId") or item.get("UserID") or
-                            item.get("userId") or item.get("UserName")
-                        )
-                        if user_id:
-                            uid = str(user_id).strip()
-                            if uid and uid.lower() not in ("null", "none"):
-                                all_user_ids.append(uid)
-
-        except CustomerFetchError:
-            # AJAX failed - fall back to HTML parsing
-            logger.info("AJAX fetch failed, falling back to HTML table parsing...")
-            all_user_ids = self._parse_concurrent_from_html()
-
-        logger.info("Concurrent fetch complete: %d user IDs", len(all_user_ids))
-        return all_user_ids
-
-    def _parse_concurrent_from_html(self) -> List[str]:
-        """Parse concurrent user IDs directly from the HTML page.
-
-        Fallback when the AJAX endpoint doesn't return JSON.
-        """
-        url = f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive"
-
-        try:
-            response = self.session.get(url, timeout=self.timeout, headers={
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Referer": f"{self.base_url}/Dashboard/Index",
-            })
-        except requests.RequestException as e:
-            logger.error("Failed to fetch concurrent HTML page: %s", e)
-            return []
-
-        if response.status_code != 200:
-            logger.error("Concurrent HTML page returned %d", response.status_code)
-            return []
-
-        # Parse HTML table using BeautifulSoup
-        try:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            user_ids = []
-
-            # Find the DataTable - look for table with user data
-            table = soup.find("table", {"class": "dataTable"}) or soup.find("table", {"id": lambda x: x and "datatable" in x.lower()}) if soup else None
-
-            if not table:
-                # Try finding any table with user IDs
-                tables = soup.find_all("table")
-                for t in tables:
-                    rows = t.find_all("tr")
-                    if len(rows) > 1:  # Has data rows
-                        # Check if first data row looks like user data
-                        first_row_text = rows[1].get_text() if len(rows) > 1 else ""
-                        if any(c.isdigit() for c in first_row_text):
-                            table = t
-                            break
-
-            if table:
-                rows = table.find_all("tr")
-                for row in rows[1:]:  # Skip header
-                    cells = row.find_all("td")
-                    if cells and len(cells) >= 1:
-                        # User Id is typically the first meaningful column
-                        # Check first few cells for something that looks like a user ID
-                        for cell in cells[:3]:
-                            text = cell.get_text(strip=True)
-                            if text and text not in ("...", "", "---") and len(text) < 50:
-                                # User IDs in IMS are like "pn_minaz", "v_kishori", etc.
-                                if not text.startswith("http") and not text.startswith("<"):
-                                    user_ids.append(text)
-                                    break
-
-                logger.info("Parsed %d concurrent user IDs from HTML table", len(user_ids))
-            else:
-                logger.warning("Could not find data table in concurrent page HTML")
-
-            return user_ids
-
-        except ImportError:
-            logger.error("BeautifulSoup not available for HTML parsing")
-            return []
-        except Exception as e:
-            logger.error("Error parsing concurrent HTML: %s", e)
-            return []
-
-    def _build_payload(self, start: int) -> dict:
-        """Build DataTables POST payload for concurrent users."""
-        payload = {
-            "draw": self._draw,
-            "start": start,
-            "length": self.page_size,
-            "search[value]": "",
-            "search[regex]": "false",
-            "order[0][column]": "0",
-            "order[0][dir]": "asc",
-            "StatusName": "Inactive",
-        }
-
-        # Columns visible on the concurrent page
-        columns = ["UserId", "PlanName", "IPAddress", "NAS", "ZoneName", "CallerId", "UpTime"]
-        for idx, col in enumerate(columns):
-            payload[f"columns[{idx}][data]"] = col
-            payload[f"columns[{idx}][name]"] = col
-            payload[f"columns[{idx}][searchable]"] = "true"
-            payload[f"columns[{idx}][orderable]"] = "true"
-            payload[f"columns[{idx}][search][value]"] = ""
-            payload[f"columns[{idx}][search][regex]"] = "false"
-
-        return payload
-
-    def _post_request(self, payload: dict) -> dict:
-        """Send POST request to GetUserConcurrentData endpoint."""
-        url = f"{self.base_url}{self.ENDPOINT}"
-
-        headers = {
-            "X-Requested-With": "XMLHttpRequest",
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "Referer": f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive",
-        }
-
-        logger.debug("POST %s (draw=%d, start=%d)", url, payload.get("draw"), payload.get("start"))
-
-        try:
-            response = self.session.post(url, data=payload, headers=headers, timeout=self.timeout)
-        except requests.RequestException as e:
-            raise CustomerFetchError(f"Network error fetching concurrent data: {e}") from e
-
-        if response.status_code != 200:
-            raise CustomerFetchError(
-                f"Concurrent API returned HTTP {response.status_code}. "
-                f"Body: {response.text[:300]}"
-            )
-
-        content_type = response.headers.get("Content-Type", "")
-        if "json" not in content_type.lower():
-            raise CustomerFetchError(
-                f"Concurrent API returned non-JSON (Content-Type: {content_type}). "
-                f"Body: {response.text[:300]}"
-            )
-
-        try:
-            data = response.json()
-        except (json.JSONDecodeError, ValueError) as e:
-            raise CustomerFetchError(
-                f"Invalid JSON from concurrent endpoint: {e}"
-            ) from e
-
-        return data
