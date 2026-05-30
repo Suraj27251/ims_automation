@@ -39,10 +39,12 @@ def create_app():
     from renewal_system.api.routes import api_bp
     from renewal_system.api.views import views_bp
     from renewal_system.api.webhook import webhook_bp
+    from renewal_system.api.customers import customers_bp
 
     app.register_blueprint(api_bp, url_prefix="/api/renewals")
     app.register_blueprint(webhook_bp, url_prefix="/api/renewals")
     app.register_blueprint(views_bp)
+    app.register_blueprint(customers_bp)
 
     # Store config on app
     app.renewal_config = config
