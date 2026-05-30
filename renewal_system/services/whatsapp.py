@@ -66,6 +66,53 @@ class WhatsAppService:
         self.api_version = config.WHATSAPP_API_VERSION
         self.duplicate_interval = config.DUPLICATE_INTERVAL_HOURS
 
+    @staticmethod
+    def format_plan_name(raw_plan: str) -> str:
+        """Convert raw IMS plan names into WhatsApp-friendly short names.
+
+        Examples:
+            Countrylink_500GB_50Mbps_therafter10Mbps_FUP -> 500GB 50Mbps
+            Countrylink_300GB_50Mbps_therafter10Mbps_FUP -> 300GB 50Mbps
+            Countrylink_20Mbps_UL -> 20Mbps Unlimited
+            Countrylink_100Mbps_UL -> 100Mbps Unlimited
+        """
+        if not raw_plan:
+            return raw_plan
+
+        # Split by underscore
+        parts = raw_plan.replace("_", " ").split()
+
+        # Extract meaningful parts: data cap and speed
+        data_cap = ""
+        speed = ""
+
+        for part in parts:
+            p = part.upper()
+            # Match data caps like 500GB, 300GB
+            if any(p.endswith(suffix) for suffix in ("GB", "TB", "MB")) and any(c.isdigit() for c in p):
+                if not data_cap:
+                    data_cap = part
+            # Match speeds like 50Mbps, 20Mbps, 100Mbps
+            elif "MBPS" in p and any(c.isdigit() for c in p):
+                if not speed:
+                    speed = part
+            # UL = Unlimited
+            elif p == "UL":
+                data_cap = "Unlimited"
+
+        # Build friendly name
+        friendly_parts = [p for p in [data_cap, speed] if p]
+        if friendly_parts:
+            return " ".join(friendly_parts)
+
+        # Fallback: if we couldn't parse, just remove "Countrylink" prefix and
+        # underscores, and truncate to 60 chars
+        cleaned = raw_plan.replace("Countrylink_", "").replace("countrylink_", "")
+        cleaned = cleaned.replace("_", " ").replace("therafter", "").replace("FUP", "").strip()
+        # Collapse multiple spaces
+        cleaned = " ".join(cleaned.split())
+        return cleaned[:60] if len(cleaned) > 60 else cleaned
+
     def send_template(self, mobile: str, template_name: str,
                       params: list, renewal_id: int,
                       operator_name: str = "system",

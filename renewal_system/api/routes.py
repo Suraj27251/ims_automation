@@ -281,6 +281,13 @@ def send_message():
     # Send via WhatsApp
     wa_service = WhatsAppService(config)
 
+    # Format plan name in params to avoid WhatsApp API rejection
+    # Plan name is param index 1 for recharge_today1/pack_expiry_alert, index 0 for expiry_to_date
+    if template_name in ("recharge_today1", "recharge_today", "pack_expiry_alert") and len(params) >= 2:
+        params[1] = WhatsAppService.format_plan_name(params[1])
+    elif template_name == "expiry_to_date" and len(params) >= 1:
+        params[0] = WhatsAppService.format_plan_name(params[0])
+
     try:
         result = wa_service.send_template(
             mobile, template_name, params, renewal_id, operator_name,
@@ -353,20 +360,21 @@ def bulk_send():
         # recharge_today1: {{1}}=name, {{2}}=plan_name
         # pack_expiry_alert: {{1}}=name, {{2}}=plan_name, {{3}}=expiry_date
         # expiry_to_date: {{1}}=plan_name, {{2}}=expiry_date
+        plan_display = WhatsAppService.format_plan_name(record.get("plan_name", ""))
         if template_name == "recharge_today1":
             params = [
                 record.get("customer_name", "Customer"),
-                record.get("plan_name", ""),
+                plan_display,
             ]
         elif template_name == "expiry_to_date":
             params = [
-                record.get("plan_name", ""),
+                plan_display,
                 str(record.get("expiry_date", "")),
             ]
         else:
             params = [
                 record.get("customer_name", "Customer"),
-                record.get("plan_name", ""),
+                plan_display,
                 str(record.get("expiry_date", "")),
             ]
 
