@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Renewal Campaign Dashboard - CountryLink Broadband</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>Renewal Campaign - CountryLink</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
@@ -33,7 +36,7 @@
                 <i class="bi bi-calendar-check text-success"></i> Upcoming
                 <span class="badge bg-success ms-auto" id="count-upcoming">0</span>
             </a>
-            <hr class="border-secondary">
+            <hr class="border-secondary my-2">
             <a class="nav-link sidebar-link" href="#" data-filter="sent">
                 <i class="bi bi-check2-circle text-info"></i> Sent
                 <span class="badge bg-info ms-auto" id="count-sent">0</span>
@@ -41,6 +44,11 @@
             <a class="nav-link sidebar-link" href="#" data-filter="failed">
                 <i class="bi bi-x-circle text-danger"></i> Failed
                 <span class="badge bg-dark ms-auto" id="count-failed">0</span>
+            </a>
+            <hr class="border-secondary my-2">
+            <a class="nav-link sidebar-link" href="#" data-filter="customers">
+                <i class="bi bi-people text-primary"></i> All Customers
+                <span class="badge bg-primary ms-auto" id="count-customers">0</span>
             </a>
         </nav>
         <div class="sidebar-footer p-3 border-top border-secondary mt-auto">
@@ -62,8 +70,8 @@
                 <h4 class="mb-0" id="page-title">All Renewals</h4>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <div class="input-group input-group-sm" style="max-width: 250px;">
-                    <input type="text" class="form-control" placeholder="Search..." id="search-input">
+                <div class="input-group input-group-sm" style="max-width: 280px;">
+                    <input type="text" class="form-control" placeholder="Search name, mobile, account..." id="search-input">
                     <button class="btn btn-outline-secondary" id="btn-search">
                         <i class="bi bi-search"></i>
                     </button>
@@ -74,64 +82,101 @@
         <!-- Stats Cards -->
         <div class="container-fluid p-3">
             <div class="row g-3 mb-3">
-                <div class="col-6 col-md-3">
-                    <div class="card stat-card border-0 shadow-sm">
-                        <div class="card-body text-center">
-                            <div class="stat-icon text-primary"><i class="bi bi-people"></i></div>
-                            <h3 class="mb-0" id="stat-total">0</h3>
+                <div class="col-6 col-lg-2">
+                    <div class="card stat-card border-0 shadow-sm h-100">
+                        <div class="card-body text-center py-3">
+                            <div class="stat-icon text-primary"><i class="bi bi-people-fill"></i></div>
+                            <h3 class="mb-0 fw-bold" id="stat-total">0</h3>
                             <small class="text-muted">Total Records</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="card stat-card border-0 shadow-sm border-start border-danger border-3">
-                        <div class="card-body text-center">
-                            <div class="stat-icon text-danger"><i class="bi bi-exclamation-triangle"></i></div>
-                            <h3 class="mb-0" id="stat-expired">0</h3>
+                <div class="col-6 col-lg-2">
+                    <div class="card stat-card border-0 shadow-sm border-start border-danger border-3 h-100">
+                        <div class="card-body text-center py-3">
+                            <div class="stat-icon text-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                            <h3 class="mb-0 fw-bold" id="stat-expired">0</h3>
                             <small class="text-muted">Expired</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="card stat-card border-0 shadow-sm border-start border-warning border-3">
-                        <div class="card-body text-center">
-                            <div class="stat-icon text-warning"><i class="bi bi-clock-history"></i></div>
-                            <h3 class="mb-0" id="stat-today">0</h3>
+                <div class="col-6 col-lg-2">
+                    <div class="card stat-card border-0 shadow-sm border-start border-warning border-3 h-100">
+                        <div class="card-body text-center py-3">
+                            <div class="stat-icon text-warning"><i class="bi bi-clock-fill"></i></div>
+                            <h3 class="mb-0 fw-bold" id="stat-today">0</h3>
                             <small class="text-muted">Expiring Today</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="card stat-card border-0 shadow-sm border-start border-success border-3">
-                        <div class="card-body text-center">
-                            <div class="stat-icon text-success"><i class="bi bi-calendar-check"></i></div>
-                            <h3 class="mb-0" id="stat-upcoming">0</h3>
+                <div class="col-6 col-lg-2">
+                    <div class="card stat-card border-0 shadow-sm border-start border-success border-3 h-100">
+                        <div class="card-body text-center py-3">
+                            <div class="stat-icon text-success"><i class="bi bi-calendar-check-fill"></i></div>
+                            <h3 class="mb-0 fw-bold" id="stat-upcoming">0</h3>
                             <small class="text-muted">Upcoming</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <div class="card stat-card border-0 shadow-sm border-start border-info border-3 h-100">
+                        <div class="card-body text-center py-3">
+                            <div class="stat-icon text-info"><i class="bi bi-send-check-fill"></i></div>
+                            <h3 class="mb-0 fw-bold" id="stat-sent-today">0</h3>
+                            <small class="text-muted">Sent Today</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <div class="card stat-card border-0 shadow-sm border-start border-secondary border-3 h-100">
+                        <div class="card-body text-center py-3">
+                            <div class="stat-icon text-secondary"><i class="bi bi-person-check-fill"></i></div>
+                            <h3 class="mb-0 fw-bold" id="stat-customers">0</h3>
+                            <small class="text-muted">Total Customers</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Zone-wise mini chart -->
+            <div class="row g-3 mb-3" id="zone-stats-row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <small class="text-muted fw-bold text-uppercase">Zone Distribution</small>
+                                <button class="btn btn-sm btn-link text-muted p-0" id="toggle-zone-stats">
+                                    <i class="bi bi-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div class="zone-bars mt-2" id="zone-bars"></div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Action Bar -->
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="select-all">
-                    <label class="form-check-label" for="select-all">Select All</label>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3 action-bar-mobile">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="select-all">
+                        <label class="form-check-label small" for="select-all">Select All</label>
+                    </div>
+                    <button class="btn btn-sm btn-success" id="btn-bulk-send" disabled>
+                        <i class="bi bi-whatsapp"></i> Send (<span id="selected-count">0</span>)
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="btn-export">
+                        <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Export</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="btn-refresh">
+                        <i class="bi bi-arrow-clockwise"></i> <span class="d-none d-sm-inline">Refresh</span>
+                    </button>
                 </div>
-                <button class="btn btn-sm btn-success" id="btn-bulk-send" disabled>
-                    <i class="bi bi-whatsapp"></i> Send Selected (<span id="selected-count">0</span>)
-                </button>
-                <button class="btn btn-sm btn-outline-secondary" id="btn-export">
-                    <i class="bi bi-download"></i> Export CSV
-                </button>
-                <button class="btn btn-sm btn-outline-secondary" id="btn-refresh">
-                    <i class="bi bi-arrow-clockwise"></i> Refresh
-                </button>
-                <div class="ms-auto d-flex gap-2">
-                    <select class="form-select form-select-sm" id="filter-zone" style="max-width:150px;">
+                <div class="d-flex gap-2 ms-md-auto flex-grow-1 flex-md-grow-0">
+                    <select class="form-select form-select-sm" id="filter-zone">
                         <option value="">All Zones</option>
                     </select>
-                    <select class="form-select form-select-sm" id="filter-plan" style="max-width:180px;">
+                    <select class="form-select form-select-sm" id="filter-plan">
                         <option value="">All Plans</option>
                     </select>
                 </div>
@@ -175,6 +220,185 @@
     </div>
 </div>
 
+<!-- Customer Detail Offcanvas -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="customerDetail" aria-labelledby="customerDetailLabel">
+    <div class="offcanvas-header bg-primary text-white">
+        <h5 class="offcanvas-title" id="customerDetailLabel"><i class="bi bi-person-circle"></i> Customer Details</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-0">
+        <!-- Customer Header -->
+        <div class="customer-profile-header p-3 bg-light border-bottom">
+            <div class="d-flex align-items-center gap-3">
+                <div class="avatar-circle">
+                    <i class="bi bi-person-fill"></i>
+                </div>
+                <div>
+                    <h6 class="mb-0 fw-bold" id="detail-name">--</h6>
+                    <small class="text-muted" id="detail-user-id">ID: --</small>
+                </div>
+                <span class="badge ms-auto" id="detail-status-badge">--</span>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="p-3 border-bottom">
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-success flex-fill" id="detail-btn-whatsapp">
+                    <i class="bi bi-whatsapp"></i> Send Message
+                </button>
+                <a class="btn btn-sm btn-outline-primary flex-fill" id="detail-btn-call" href="#">
+                    <i class="bi bi-telephone"></i> Call
+                </a>
+            </div>
+        </div>
+
+        <!-- Info Sections -->
+        <div class="accordion accordion-flush" id="customerAccordion">
+            <!-- Plan & Subscription -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#planSection">
+                        <i class="bi bi-wifi me-2 text-primary"></i> Plan & Subscription
+                    </button>
+                </h2>
+                <div id="planSection" class="accordion-collapse collapse show" data-bs-parent="#customerAccordion">
+                    <div class="accordion-body py-2">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Plan</span>
+                                <span class="detail-value" id="detail-plan">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Category</span>
+                                <span class="detail-value" id="detail-plan-category">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Validity</span>
+                                <span class="detail-value" id="detail-validity">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Expiry Date</span>
+                                <span class="detail-value fw-bold" id="detail-expiry">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Days Remaining</span>
+                                <span class="detail-value" id="detail-days">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Activation Date</span>
+                                <span class="detail-value" id="detail-activation">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Data Reset Date</span>
+                                <span class="detail-value" id="detail-data-reset">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact & Location -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#contactSection">
+                        <i class="bi bi-geo-alt me-2 text-success"></i> Contact & Location
+                    </button>
+                </h2>
+                <div id="contactSection" class="accordion-collapse collapse" data-bs-parent="#customerAccordion">
+                    <div class="accordion-body py-2">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Mobile</span>
+                                <span class="detail-value" id="detail-mobile">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Email</span>
+                                <span class="detail-value" id="detail-email">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Zone</span>
+                                <span class="detail-value" id="detail-zone">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Area</span>
+                                <span class="detail-value" id="detail-area">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Building</span>
+                                <span class="detail-value" id="detail-building">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Flat No</span>
+                                <span class="detail-value" id="detail-flat">--</span>
+                            </div>
+                            <div class="detail-item full-width">
+                                <span class="detail-label">Address</span>
+                                <span class="detail-value" id="detail-address">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network & Technical -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#networkSection">
+                        <i class="bi bi-hdd-network me-2 text-warning"></i> Network & Technical
+                    </button>
+                </h2>
+                <div id="networkSection" class="accordion-collapse collapse" data-bs-parent="#customerAccordion">
+                    <div class="accordion-body py-2">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Network Type</span>
+                                <span class="detail-value" id="detail-network-type">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Connectivity</span>
+                                <span class="detail-value" id="detail-connectivity">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">MAC Address</span>
+                                <span class="detail-value font-monospace" id="detail-mac">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">ONU No</span>
+                                <span class="detail-value" id="detail-onu">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Static IP</span>
+                                <span class="detail-value font-monospace" id="detail-static-ip">--</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">KYC Status</span>
+                                <span class="detail-value" id="detail-kyc">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WhatsApp History -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#historySection">
+                        <i class="bi bi-chat-dots me-2 text-info"></i> Message History
+                    </button>
+                </h2>
+                <div id="historySection" class="accordion-collapse collapse" data-bs-parent="#customerAccordion">
+                    <div class="accordion-body py-2">
+                        <div id="detail-history" class="message-history">
+                            <p class="text-muted text-center small">No messages sent yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Send Message Modal -->
 <div class="modal fade" id="sendModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -204,9 +428,9 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold">Parameters (auto-filled)</label>
                     <div class="bg-light p-2 rounded small" id="modal-params">
-                        <div>{{1}} → <span id="param-1">--</span></div>
-                        <div>{{2}} → <span id="param-2">--</span></div>
-                        <div id="param-3-row">{{3}} → <span id="param-3">--</span></div>
+                        <div>1 &mdash; <span id="param-1">--</span></div>
+                        <div>2 &mdash; <span id="param-2">--</span></div>
+                        <div id="param-3-row">3 &mdash; <span id="param-3">--</span></div>
                     </div>
                 </div>
                 <div class="alert alert-warning d-none" id="modal-duplicate-warning">
