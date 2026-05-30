@@ -338,85 +338,110 @@ class CustomerFetcher:
     def _parse_records(self, data_list: list) -> List[CustomerRecord]:
         """Parse a list of raw record dicts into CustomerRecord objects.
 
-        Handles multiple possible field name variations from IMS.
+        Field mapping based on actual IMS response:
+        - UserId: user ID
+        - FirstName: customer name (IMS uses FirstName, not CustName)
+        - StatusName: Active/Inactive (human-readable)
+        - StatusId: 1=Active, 2=Inactive
+        - IsActive: 0/1
+        - CurrentStatus: 0/1
+        - PlanName: plan name
+        - PlanCategory: Unlimited/FUP etc
+        - BillingcycName: Monthly/Quarterly/Semi-Annually (validity)
+        - ZoneName: zone
+        - AreaName: area
+        - BuildingName: building
+        - FlatNo: flat number
+        - Address: address
+        - MobileNo: mobile
+        - Email: email
+        - MACID: MAC address
+        - MACFree: MAC free flag
+        - ONUNo: ONU number
+        - StaticIP: static IP
+        - RadiusPassword: radius password
+        - NetworkType: PPPOE etc
+        - FiberName: FTTH etc (connectivity mode)
+        - OwnerORTenant: owner/tenant
+        - CompanyName: company
+        - KYCApproved: 0/1
+        - Roaming: 0/1
+        - Password: plain password
+        - IdNo: ID number
+        - PayUserId: payment ID
+        - CreatedByName: created by
+        - IsAdv: advance renew flag
         """
         records = []
         for item in data_list:
+            # Determine status: use StatusName if available, else derive from IsActive
+            status_name = item.get("StatusName")
+            if status_name:
+                status = str(status_name).strip()
+            else:
+                is_active = item.get("IsActive", item.get("CurrentStatus", ""))
+                status = "Active" if str(is_active) == "1" else "Inactive"
+
             record = CustomerRecord(
-                user_id=self._get_field(item, "UserId", "UserID", "userId", "user_id", "UserName"),
-                customer_name=self._get_field(item, "CustName", "Name", "CustomerName", "custName", "customer_name"),
-                mobile=self._get_field(item, "MobileNo", "Mobile", "mobile", "MobileNumber", "Phone"),
-                plan_name=self._get_field(item, "PlanName", "Plan", "planName", "plan_name"),
-                plan_category=self._get_field(item, "PlanCategory", "Category", "planCategory"),
-                validity=self._get_field(item, "Validity", "validity", "PlanValidity"),
-                status=self._get_field(item, "Status", "status", "UserStatus", "AccountStatus", "IsActive"),
-                zone_name=self._get_field(item, "ZoneName", "Zone", "zoneName", "zone_name"),
-                area=self._get_field(item, "Area", "area", "AreaName"),
-                building=self._get_field(item, "Building", "building", "BuildingName"),
-                flat_no=self._get_field(item, "FlatNo", "flatNo", "Flat", "FlatNumber"),
-                address=self._get_field(item, "Address", "address", "FullAddress"),
-                network_type=self._get_field(item, "NetworkType", "networkType", "Network"),
-                connectivity_mode=self._get_field(item, "ConnectivityMode", "connectivityMode", "Connectivity"),
-                mac=self._get_field(item, "MAC", "Mac", "mac", "MacAddress"),
-                mac_free=self._get_field(item, "MACFree", "MacFree", "macFree"),
-                onu_no=self._get_field(item, "ONUNo", "OnuNo", "ONU", "onuNo"),
-                static_ip=self._get_field(item, "StaticIP", "StaticIp", "staticIp", "IPAddress"),
-                radius_password=self._get_field(item, "RadiusPassword", "radiusPassword", "Password"),
-                email=self._get_field(item, "Email", "email", "EmailId", "EmailAddress"),
-                company_name=self._get_field(item, "CompanyName", "companyName", "Company"),
-                owner_tenant=self._get_field(item, "OwnerTenant", "ownerTenant", "OwnerOrTenant"),
-                payment_id=self._get_field(item, "PaymentId", "paymentId", "PaymentID"),
-                created_by=self._get_field(item, "CreatedBy", "createdBy"),
-                adv_renew=self._get_field(item, "AdvRenew", "advRenew", "AdvanceRenew"),
-                kyc_approved=self._get_field(item, "KYCApproved", "kycApproved", "KYC", "KycStatus"),
-                roaming=self._get_field(item, "Roaming", "roaming"),
-                password_plain=self._get_field(item, "PasswordPlain", "passwordPlain", "PlainPassword"),
-                id_no=self._get_field(item, "IdNo", "idNo", "IDNo", "IdNumber"),
+                user_id=self._clean_str(item.get("UserId")),
+                customer_name=self._clean_str(
+                    item.get("FirstName") or item.get("CustName") or item.get("Name")
+                ),
+                mobile=self._clean_str(item.get("MobileNo") or item.get("Mobile")),
+                plan_name=self._clean_str(item.get("PlanName")),
+                plan_category=self._clean_str(item.get("PlanCategory")),
+                validity=self._clean_str(item.get("BillingcycName") or item.get("Validity")),
+                status=status,
+                zone_name=self._clean_str(item.get("ZoneName")),
+                area=self._clean_str(item.get("AreaName") or item.get("Area")),
+                building=self._clean_str(item.get("BuildingName") or item.get("Building")),
+                flat_no=self._clean_str(item.get("FlatNo")),
+                address=self._clean_str(item.get("Address")),
+                network_type=self._clean_str(item.get("NetworkType")),
+                connectivity_mode=self._clean_str(item.get("FiberName") or item.get("ConnectivityMode")),
+                mac=self._clean_str(item.get("MACID") or item.get("MAC")),
+                mac_free=self._clean_str(item.get("MACFree")),
+                onu_no=self._clean_str(item.get("ONUNo")),
+                static_ip=self._clean_str(item.get("StaticIP")),
+                radius_password=self._clean_str(item.get("RadiusPassword")),
+                email=self._clean_str(item.get("Email")),
+                company_name=self._clean_str(item.get("CompanyName")),
+                owner_tenant=self._clean_str(item.get("OwnerORTenant") or item.get("OwnerTenant")),
+                payment_id=self._clean_str(item.get("PayUserId") or item.get("PaymentId")),
+                created_by=self._clean_str(item.get("CreatedByName") or item.get("CreatedBy")),
+                adv_renew=self._clean_str(item.get("IsAdv") or item.get("AdvRenew")),
+                kyc_approved=self._clean_str(item.get("KYCApproved")),
+                roaming=self._clean_str(item.get("Roaming")),
+                password_plain=self._clean_str(item.get("Password") or item.get("PasswordPlain")),
+                id_no=self._clean_str(item.get("IdNo")),
             )
 
-            # Parse date fields - try multiple possible names
+            # Parse date fields using actual IMS field names
             record.activation_date = self._parse_date(
-                self._get_field_raw(item, "ActivationDate", "activationDate", "ActivateDate", "StartDate")
+                item.get("ActivationDateS") or item.get("PlanActivationDateS")
             )
             record.expiry_date = self._parse_date(
-                self._get_field_raw(item, "PlanExpiryDate", "ExpiryDate", "ExpDate", "expiryDate", "Expiry")
+                item.get("PlanExpiryDate") or item.get("PlanExpiryDateS") or item.get("PlanExpiryDateNew")
             )
-            record.data_reset_date = self._parse_date(
-                self._get_field_raw(item, "DataResetDate", "dataResetDate", "ResetDate")
-            )
+            record.data_reset_date = self._parse_date(item.get("DataResetDate"))
             record.reg_date = self._parse_date(
-                self._get_field_raw(item, "RegDate", "regDate", "RegistrationDate", "RegisterDate", "CreatedDate")
+                item.get("CreatedDate") or item.get("CreatedDateS")
             )
 
             records.append(record)
 
         return records
 
-    def _get_field(self, item: dict, *keys) -> Optional[str]:
-        """Try multiple field names and return the first non-empty value as cleaned string."""
-        for key in keys:
-            val = item.get(key)
-            if val is not None:
-                cleaned = self._clean_str(val)
-                if cleaned:
-                    return cleaned
-        return None
-
-    def _get_field_raw(self, item: dict, *keys):
-        """Try multiple field names and return the first non-None raw value."""
-        for key in keys:
-            val = item.get(key)
-            if val is not None and str(val).strip() and str(val).strip().lower() not in ("null", "none"):
-                return val
-        return None
-
     def _parse_date(self, raw_value) -> Optional[datetime]:
-        """Parse a date field - handles ASP.NET /Date()/ format and ISO strings."""
+        """Parse a date field - handles ASP.NET /Date()/ format and ISO strings.
+
+        Handles negative timestamps and out-of-range dates gracefully.
+        """
         if not raw_value:
             return None
 
         raw_str = str(raw_value).strip()
-        if not raw_str or raw_str.lower() in ("null", "none", ""):
+        if not raw_str or raw_str.lower() in ("null", "none", "", "no data"):
             return None
 
         # ASP.NET /Date(...)/ format
@@ -424,7 +449,24 @@ class CustomerFetcher:
             try:
                 return parse_aspnet_date(raw_str)
             except (ValueError, TypeError):
-                logger.debug("Failed to parse ASP.NET date: %s", raw_str)
+                # Try manual parsing for out-of-range dates
+                import re
+                match = re.match(r'^/Date\((-?\d+)([+-]\d{4})?\)/$', raw_str)
+                if match:
+                    timestamp_ms = int(match.group(1))
+                    # Skip negative timestamps (invalid/placeholder dates)
+                    if timestamp_ms < 0:
+                        return None
+                    # Try converting even if outside the strict 2000-2100 range
+                    try:
+                        from datetime import timezone
+                        dt = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=timezone.utc)
+                        # Only accept reasonable dates (2000-2100)
+                        if dt.year < 2000 or dt.year > 2100:
+                            return None
+                        return dt
+                    except (OSError, OverflowError, ValueError):
+                        return None
                 return None
 
         # ISO format fallback
@@ -439,11 +481,11 @@ class CustomerFetcher:
 
     @staticmethod
     def _clean_str(value) -> Optional[str]:
-        """Clean a string value - return None for empty/null values."""
+        """Clean a string value - return None for empty/null/placeholder values."""
         if value is None:
             return None
         s = str(value).strip()
-        if not s or s.lower() in ("null", "none"):
+        if not s or s.lower() in ("null", "none", "no data"):
             return None
         return s
 
@@ -596,13 +638,9 @@ class ConcurrentUserFetcher:
 
     def _post_request(self, payload: dict) -> dict:
         """Send POST request to concurrent GetData endpoint."""
-        # Try multiple possible endpoint patterns
-        endpoints_to_try = [
-            f"{self.base_url}{self.ENDPOINT}/GetData",
-            f"{self.base_url}{self.ENDPOINT}",
-            f"{self.base_url}/Dashboard/GetUserDataConcurrent",
-        ]
-
+        # The concurrent page uses the same URL pattern as other IMS DataTables:
+        # POST to the page URL itself with DataTables params returns JSON
+        # But we need to pass StatusName as a query param or form field
         url = f"{self.base_url}{self.PAGE_URL}"
 
         headers = {
@@ -612,19 +650,28 @@ class ConcurrentUserFetcher:
             "Referer": f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive",
         }
 
-        logger.debug("POST %s (draw=%d, start=%d)", url, payload.get("draw"), payload.get("start"))
+        # Try posting to the page URL with query param
+        url_with_param = f"{url}?StatusName=Inactive"
 
-        # Try the main URL first (page URL often doubles as the AJAX endpoint)
+        logger.debug("POST %s (draw=%d, start=%d)", url_with_param, payload.get("draw"), payload.get("start"))
+
         try:
-            response = self.session.post(url, data=payload, headers=headers, timeout=self.timeout)
+            response = self.session.post(url_with_param, data=payload, headers=headers, timeout=self.timeout)
         except requests.RequestException as e:
             raise CustomerFetchError(f"Network error fetching concurrent data: {e}") from e
 
-        # If we got HTML back, try alternate endpoints
         content_type = response.headers.get("Content-Type", "")
+
+        # If first attempt returned HTML, try GetData sub-path with query param
         if "json" not in content_type.lower() and response.status_code == 200:
-            for alt_url in endpoints_to_try:
+            alt_urls = [
+                f"{self.base_url}/Dashboard/UserDataConcurrent/GetData?StatusName=Inactive",
+                f"{self.base_url}/Dashboard/UserDataConcurrentGetData?StatusName=Inactive",
+                f"{self.base_url}/Dashboard/GetConcurrentUsers?StatusName=Inactive",
+            ]
+            for alt_url in alt_urls:
                 try:
+                    logger.debug("Trying alternate concurrent URL: %s", alt_url)
                     response = self.session.post(alt_url, data=payload, headers=headers, timeout=self.timeout)
                     content_type = response.headers.get("Content-Type", "")
                     if "json" in content_type.lower():
