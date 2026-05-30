@@ -402,16 +402,22 @@ function openSendModal(recordId) {
     const template = TEMPLATE_MAP[record.category] || 'expiry_to_date';
     document.getElementById('modal-template').value = template;
 
-    // Auto-fill params based on category
-    document.getElementById('param-1').textContent = record.customer_name || 'Customer';
-    document.getElementById('param-2').textContent = record.plan_name || '';
-    document.getElementById('param-3').textContent = record.expiry_date || '';
-
-    // Hide param-3 row for recharge_today1 (only 2 params)
+    // Auto-fill params based on category/template
     const param3Row = document.getElementById('param-3-row');
     if (template === 'recharge_today1') {
+        document.getElementById('param-1').textContent = record.customer_name || 'Customer';
+        document.getElementById('param-2').textContent = record.plan_name || '';
+        document.getElementById('param-3').textContent = '';
+        param3Row.style.display = 'none';
+    } else if (template === 'expiry_to_date') {
+        document.getElementById('param-1').textContent = record.plan_name || '';
+        document.getElementById('param-2').textContent = record.expiry_date || '';
+        document.getElementById('param-3').textContent = '';
         param3Row.style.display = 'none';
     } else {
+        document.getElementById('param-1').textContent = record.customer_name || 'Customer';
+        document.getElementById('param-2').textContent = record.plan_name || '';
+        document.getElementById('param-3').textContent = record.expiry_date || '';
         param3Row.style.display = '';
     }
 
@@ -444,6 +450,11 @@ async function confirmSend() {
         templateParams = [
             record.customer_name || 'Customer',
             record.plan_name || '',
+        ];
+    } else if (templateName === 'expiry_to_date') {
+        templateParams = [
+            record.plan_name || '',
+            record.expiry_date || '',
         ];
     } else {
         templateParams = [

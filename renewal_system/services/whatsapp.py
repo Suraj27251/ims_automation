@@ -43,8 +43,8 @@ class WhatsAppService:
         },
         "expiry_to_date": {
             "language": "en",
-            "param_count": 3,
-            # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
+            "param_count": 2,
+            # {{1}} = plan_name, {{2}} = expiry_date
         },
     }
 
