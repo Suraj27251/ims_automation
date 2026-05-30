@@ -500,7 +500,7 @@ class ConcurrentUserFetcher:
     """
 
     PAGE_URL = "/Dashboard/UserDataConcurrent"
-    ENDPOINT = "/Dashboard/UserDataConcurrent/GetData"
+    ENDPOINT = "/Dashboard/GetUserConcurrentData"
 
     def __init__(self, session: requests.Session, base_url: str,
                  page_size: int = 100, timeout: int = 60):
@@ -511,7 +511,24 @@ class ConcurrentUserFetcher:
         self._draw = 0
 
     def open_concurrent_page(self) -> None:
-        """Navigate to the concurrent users page to establish session context."""
+        """Navigate to the concurrent users page to establish session context.
+
+        Must first visit the Dashboard to fully establish the session,
+        then navigate to the concurrent page.
+        """
+        # First, follow the login redirect to Dashboard (establishes full session)
+        dashboard_url = f"{self.base_url}/Dashboard/Index"
+        logger.info("Visiting dashboard first: %s", dashboard_url)
+
+        try:
+            dash_resp = self.session.get(dashboard_url, timeout=self.timeout, headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            })
+            logger.debug("Dashboard: status=%d, url=%s", dash_resp.status_code, dash_resp.url)
+        except requests.RequestException as e:
+            logger.warning("Dashboard visit failed: %s", e)
+
+        # Now visit the concurrent page
         url = f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive"
         logger.info("Opening concurrent users page: %s", url)
 
@@ -521,17 +538,17 @@ class ConcurrentUserFetcher:
                 timeout=self.timeout,
                 headers={
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    "Referer": f"{self.base_url}/Dashboard/Index",
+                    "Referer": dashboard_url,
                 },
             )
         except requests.RequestException as e:
             raise CustomerFetchError(f"Failed to open concurrent page: {e}") from e
 
         final_url = (response.url or "").lower()
-        if "/admin" in final_url and "dashboard" not in final_url:
+        if "/admin" in final_url and "dashboard" not in final_url and "concurrent" not in final_url:
             raise CustomerFetchError(
                 f"Concurrent page redirected to login: {response.url}. "
-                f"Session is not authenticated."
+                f"Session may lack permission for this page."
             )
 
         if response.status_code != 200:
@@ -539,7 +556,12 @@ class ConcurrentUserFetcher:
                 f"Concurrent page returned HTTP {response.status_code}"
             )
 
-        logger.info("Concurrent users page loaded: status=%d", response.status_code)
+        # Store the page content for HTML fallback parsing
+        self._page_html = response.text
+        self._page_size = len(response.text)
+
+        logger.info("Concurrent users page loaded: status=%d, size=%d, url=%s",
+                    response.status_code, len(response.text), response.url)
 
     def fetch_concurrent_user_ids(self) -> List[str]:
         """Fetch all concurrent user IDs from IMS.
@@ -708,11 +730,8 @@ class ConcurrentUserFetcher:
         return payload
 
     def _post_request(self, payload: dict) -> dict:
-        """Send POST request to concurrent GetData endpoint."""
-        # The concurrent page uses the same URL pattern as other IMS DataTables:
-        # POST to the page URL itself with DataTables params returns JSON
-        # But we need to pass StatusName as a query param or form field
-        url = f"{self.base_url}{self.PAGE_URL}"
+        """Send POST request to GetUserConcurrentData endpoint."""
+        url = f"{self.base_url}{self.ENDPOINT}"
 
         headers = {
             "X-Requested-With": "XMLHttpRequest",
@@ -721,35 +740,12 @@ class ConcurrentUserFetcher:
             "Referer": f"{self.base_url}{self.PAGE_URL}?StatusName=Inactive",
         }
 
-        # Try posting to the page URL with query param
-        url_with_param = f"{url}?StatusName=Inactive"
-
-        logger.debug("POST %s (draw=%d, start=%d)", url_with_param, payload.get("draw"), payload.get("start"))
+        logger.debug("POST %s (draw=%d, start=%d)", url, payload.get("draw"), payload.get("start"))
 
         try:
-            response = self.session.post(url_with_param, data=payload, headers=headers, timeout=self.timeout)
+            response = self.session.post(url, data=payload, headers=headers, timeout=self.timeout)
         except requests.RequestException as e:
             raise CustomerFetchError(f"Network error fetching concurrent data: {e}") from e
-
-        content_type = response.headers.get("Content-Type", "")
-
-        # If first attempt returned HTML, try GetData sub-path with query param
-        if "json" not in content_type.lower() and response.status_code == 200:
-            alt_urls = [
-                f"{self.base_url}/Dashboard/UserDataConcurrent/GetData?StatusName=Inactive",
-                f"{self.base_url}/Dashboard/UserDataConcurrentGetData?StatusName=Inactive",
-                f"{self.base_url}/Dashboard/GetConcurrentUsers?StatusName=Inactive",
-            ]
-            for alt_url in alt_urls:
-                try:
-                    logger.debug("Trying alternate concurrent URL: %s", alt_url)
-                    response = self.session.post(alt_url, data=payload, headers=headers, timeout=self.timeout)
-                    content_type = response.headers.get("Content-Type", "")
-                    if "json" in content_type.lower():
-                        logger.info("Concurrent endpoint found: %s", alt_url)
-                        break
-                except requests.RequestException:
-                    continue
 
         if response.status_code != 200:
             raise CustomerFetchError(
