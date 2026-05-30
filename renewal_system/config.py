@@ -58,7 +58,7 @@ class Config:
     # WhatsApp Cloud API
     WHATSAPP_TOKEN: str = field(default_factory=lambda: os.environ.get("WHATSAPP_TOKEN", ""))
     WHATSAPP_PHONE_ID: str = field(default_factory=lambda: os.environ.get("WHATSAPP_PHONE_ID", ""))
-    WHATSAPP_API_VERSION: str = field(default_factory=lambda: os.environ.get("WHATSAPP_API_VERSION", "v18.0"))
+    WHATSAPP_API_VERSION: str = field(default_factory=lambda: os.environ.get("WHATSAPP_API_VERSION", "v21.0"))
 
     # Duplicate protection
     DUPLICATE_INTERVAL_HOURS: int = field(

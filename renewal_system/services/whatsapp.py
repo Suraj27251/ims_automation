@@ -31,13 +31,18 @@ class WhatsAppService:
             "param_count": 3,
             # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
         },
+        "recharge_today": {
+            "language": "en",
+            "param_count": 2,
+            # {{1}} = name, {{2}} = plan_name
+        },
         "recharge_today1": {
-            "language": "en_US",
+            "language": "en",
             "param_count": 2,
             # {{1}} = name, {{2}} = plan_name
         },
         "recharge_reminder": {
-            "language": "en_US",
+            "language": "en",
             "param_count": 3,
             # {{1}} = name, {{2}} = plan_name, {{3}} = expiry_date
         },
@@ -46,6 +51,12 @@ class WhatsAppService:
             "param_count": 2,
             # {{1}} = plan_name, {{2}} = expiry_date
         },
+    }
+
+    # Fallback template names: if primary fails with 132001, try these
+    TEMPLATE_FALLBACKS = {
+        "recharge_today1": ["recharge_today", "recharge_reminder"],
+        "recharge_today": ["recharge_today1", "recharge_reminder"],
     }
 
     def __init__(self, config):
@@ -137,8 +148,8 @@ class WhatsAppService:
         if response.status_code not in (200, 201):
             error_data = response_data.get("error", {})
             error_code = error_data.get("code", 0)
-            # Error 100 = Invalid parameter - could be language mismatch
-            if error_code == 100:
+            # Error 100 = Invalid parameter, 132001 = template not found in translation
+            if error_code in (100, 132001):
                 alt_language = "en" if language_code == "en_US" else "en_US"
                 logger.info("Retrying with alternate language code: %s", alt_language)
                 payload["template"]["language"]["code"] = alt_language
@@ -175,8 +186,8 @@ class WhatsAppService:
         with get_db_cursor(self.config) as cursor:
             cursor.execute("""
                 SELECT COUNT(*) as cnt FROM whatsapp_campaign_logs
-                WHERE mobile = %s COLLATE utf8mb4_general_ci
-                AND template_name = %s COLLATE utf8mb4_general_ci
+                WHERE mobile = %s
+                AND template_name = %s
                 AND renewal_id = %s
                 AND status = 'sent' AND sent_at > %s
             """, (mobile, template_name, renewal_id, cutoff))

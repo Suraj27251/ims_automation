@@ -39,6 +39,7 @@ def get_connection_pool(config):
             password=config.MYSQL_PASSWORD,
             database=config.MYSQL_DATABASE,
             charset="utf8mb4",
+            collation="utf8mb4_general_ci",
             autocommit=False,
         )
         logger.info("MySQL connection pool created: %s@%s/%s",
@@ -62,6 +63,10 @@ def get_db_connection(config):
     pool = get_connection_pool(config)
     conn = pool.get_connection()
     try:
+        # Ensure consistent collation for this session
+        cursor = conn.cursor()
+        cursor.execute("SET NAMES utf8mb4 COLLATE utf8mb4_general_ci")
+        cursor.close()
         yield conn
     finally:
         conn.close()
