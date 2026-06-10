@@ -101,9 +101,12 @@ def get_renewals():
                    (SELECT template_name FROM whatsapp_campaign_logs wcl
                     WHERE wcl.renewal_id = r.id AND wcl.status = 'sent'
                     ORDER BY sent_at DESC LIMIT 1) as last_template_sent,
-                   (SELECT delivery_status FROM whatsapp_campaign_logs wcl
+                   (SELECT COALESCE(delivery_status, status) FROM whatsapp_campaign_logs wcl
                     WHERE wcl.renewal_id = r.id
-                    ORDER BY sent_at DESC LIMIT 1) as delivery_status
+                    ORDER BY sent_at DESC LIMIT 1) as delivery_status,
+                   (SELECT error_message FROM whatsapp_campaign_logs wcl
+                    WHERE wcl.renewal_id = r.id
+                    ORDER BY sent_at DESC LIMIT 1) as delivery_error_message
             FROM renewal_records r
             WHERE {where_clause}
             ORDER BY r.{sort_by} {sort_dir}
@@ -608,8 +611,8 @@ def get_delivery_statuses():
     with get_db_cursor(config) as cursor:
         placeholders = ",".join(["%s"] * len(renewal_ids))
         cursor.execute(f"""
-            SELECT renewal_id, delivery_status, whatsapp_message_id,
-                   sent_at, delivered_at, read_at, error_message
+            SELECT renewal_id, COALESCE(delivery_status, status) as delivery_status, whatsapp_message_id,
+                   sent_at, delivered_at, read_at, failed_at, error_message
             FROM whatsapp_campaign_logs
             WHERE renewal_id IN ({placeholders})
             AND id IN (
@@ -628,6 +631,7 @@ def get_delivery_statuses():
             "sent_at": row["sent_at"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row.get("sent_at"), datetime) else row.get("sent_at"),
             "delivered_at": row["delivered_at"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row.get("delivered_at"), datetime) else row.get("delivered_at"),
             "read_at": row["read_at"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row.get("read_at"), datetime) else row.get("read_at"),
+            "failed_at": row["failed_at"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(row.get("failed_at"), datetime) else row.get("failed_at"),
             "error_message": row.get("error_message"),
         }
 

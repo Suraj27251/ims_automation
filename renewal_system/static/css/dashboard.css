@@ -192,6 +192,20 @@ body {
     color: white;
 }
 
+.delivery-status-with-reason {
+    max-width: 180px;
+}
+
+.delivery-fail-reason {
+    display: block;
+    max-width: 180px;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: help;
+}
+
 /* Action Buttons */
 .btn-send {
     padding: 0.25rem 0.5rem;
