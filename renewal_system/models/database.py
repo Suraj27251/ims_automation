@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS whatsapp_campaign_logs (
     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     delivered_at TIMESTAMP NULL,
     read_at TIMESTAMP NULL,
+    failed_at TIMESTAMP NULL,
+    webhook_payload JSON NULL,
     INDEX idx_renewal_id (renewal_id),
     INDEX idx_mobile (mobile),
     INDEX idx_status (status),
@@ -156,6 +158,43 @@ CREATE TABLE IF NOT EXISTS operator_actions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+
+
+def _ensure_columns(cursor, table_name, columns, required_table=True):
+    """Add missing columns without depending on MySQL ADD COLUMN IF NOT EXISTS.
+
+    Args:
+        cursor: Active MySQL cursor.
+        table_name: Table to inspect and alter.
+        columns: Mapping of column name to SQL definition.
+        required_table: When False, silently skip if the table is absent.
+    """
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE() AND table_name = %s
+    """, (table_name,))
+    table_exists = cursor.fetchone()[0] > 0
+    if not table_exists:
+        if required_table:
+            logger.warning("Expected table %s does not exist while ensuring columns", table_name)
+        return
+
+    cursor.execute("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = %s
+    """, (table_name,))
+    existing = {row[0] for row in cursor.fetchall()}
+
+    for column_name, definition in columns.items():
+        if column_name in existing:
+            continue
+        try:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+            logger.info("Added %s.%s column for WhatsApp lifecycle tracking", table_name, column_name)
+        except Exception as exc:
+            logger.warning("Could not add %s.%s: %s", table_name, column_name, exc)
 
 def init_tables(config):
     """Create all required tables if they don't exist."""
@@ -181,10 +220,27 @@ def init_tables(config):
                 ALTER TABLE whatsapp_campaign_logs
                 ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(50) DEFAULT NULL,
                 ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP NULL,
-                ADD COLUMN IF NOT EXISTS read_at TIMESTAMP NULL
+                ADD COLUMN IF NOT EXISTS read_at TIMESTAMP NULL,
+                ADD COLUMN IF NOT EXISTS failed_at TIMESTAMP NULL,
+                ADD COLUMN IF NOT EXISTS webhook_payload JSON NULL
             """)
         except Exception:
             pass  # Column already exists or MySQL version doesn't support IF NOT EXISTS
+
+
+        # Add WhatsApp lifecycle tracking columns for older MySQL versions and
+        # optional legacy deployments that use whatsapp_logs.
+        _ensure_columns(cursor, "whatsapp_campaign_logs", {
+            "delivery_status": "VARCHAR(50) DEFAULT NULL",
+            "delivered_at": "TIMESTAMP NULL",
+            "read_at": "TIMESTAMP NULL",
+            "failed_at": "TIMESTAMP NULL",
+            "webhook_payload": "JSON NULL",
+        })
+        _ensure_columns(cursor, "whatsapp_logs", {
+            "webhook_payload": "JSON NULL",
+            "failed_at": "DATETIME NULL",
+        }, required_table=False)
 
         # Add index on whatsapp_message_id if not exists
         try:

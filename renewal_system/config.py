@@ -59,6 +59,12 @@ class Config:
     WHATSAPP_TOKEN: str = field(default_factory=lambda: os.environ.get("WHATSAPP_TOKEN", ""))
     WHATSAPP_PHONE_ID: str = field(default_factory=lambda: os.environ.get("WHATSAPP_PHONE_ID", ""))
     WHATSAPP_API_VERSION: str = field(default_factory=lambda: os.environ.get("WHATSAPP_API_VERSION", "v21.0"))
+    WHATSAPP_VERIFY_TOKEN: str = field(default_factory=lambda: (
+        os.environ.get("WHATSAPP_VERIFY_TOKEN")
+        or os.environ.get("WHATSAPP_WEBHOOK_VERIFY_TOKEN")
+        or os.environ.get("WEBHOOK_VERIFY_TOKEN")
+        or ""
+    ))
 
     # Duplicate protection
     DUPLICATE_INTERVAL_HOURS: int = field(
