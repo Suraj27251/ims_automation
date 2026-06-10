@@ -326,7 +326,7 @@ function renderTable(records) {
             <td>${daysText}</td>
             <td class="d-none d-lg-table-cell"><small class="text-muted">${template}</small></td>
             <td>${badge}</td>
-            <td>${getDeliveryBadge(r.delivery_status)}</td>
+            <td>${getDeliveryDisplay(r.delivery_status, r.delivery_error_message || r.error_message)}</td>
             <td class="d-none d-md-table-cell"><small class="text-muted">${r.last_sent_at || '--'}</small></td>
             <td>
                 <div class="d-flex gap-1">
@@ -375,7 +375,7 @@ function renderMobileCard(r, isSelected, badge, template, daysText) {
                         </div>
                     </div>
                     <div class="d-flex gap-2 mt-1">
-                        ${getDeliveryBadge(r.delivery_status)}
+                        ${getDeliveryDisplay(r.delivery_status, r.delivery_error_message || r.error_message)}
                         ${r.last_sent_at ? `<small class="text-muted">Sent: ${r.last_sent_at}</small>` : ''}
                     </div>
                 </div>
@@ -485,14 +485,30 @@ function getDaysText(days) {
     return `<span class="text-success">${days}d</span>`;
 }
 
-function getDeliveryBadge(status) {
+function getDeliveryDisplay(status, reason) {
+    const badge = getDeliveryBadge(status, reason);
+    if (status !== 'failed' || !reason) return badge;
+
+    const safeReason = escapeHtml(reason);
+    const safeTitle = escapeAttr(reason);
+    return `
+        <div class="delivery-status-with-reason" title="${safeTitle}">
+            ${badge}
+            <small class="delivery-fail-reason text-danger">${safeReason}</small>
+        </div>`;
+}
+
+function getDeliveryBadge(status, reason = '') {
     if (!status) return '<small class="text-muted">--</small>';
     switch (status) {
         case 'sent': return '<span class="badge bg-secondary"><i class="bi bi-check"></i> Sent</span>';
         case 'delivered': return '<span class="badge bg-info"><i class="bi bi-check2-all"></i> Delivered</span>';
         case 'read': return '<span class="badge bg-primary"><i class="bi bi-eye"></i> Read</span>';
-        case 'failed': return '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>';
-        default: return `<span class="badge bg-secondary">${status}</span>`;
+        case 'failed': {
+            const title = reason ? ` title="${escapeAttr(reason)}"` : '';
+            return `<span class="badge bg-danger"${title}><i class="bi bi-x-circle"></i> Failed</span>`;
+        }
+        default: return `<span class="badge bg-secondary">${escapeHtml(status)}</span>`;
     }
 }
 
@@ -620,10 +636,10 @@ async function loadMessageHistory(renewalId) {
         const data = await res.json();
         if (data.success && data.data && data.data.length > 0) {
             container.innerHTML = data.data.map(log => `
-                <div class="msg-item ${log.status === 'failed' ? 'msg-failed' : ''}">
+                <div class="msg-item ${(log.delivery_status === 'failed' || log.status === 'failed') ? 'msg-failed' : ''}">
                     <div class="d-flex justify-content-between">
                         <span class="msg-template">${escapeHtml(log.template_name)}</span>
-                        <span class="msg-status">${getDeliveryBadge(log.delivery_status || log.status)}</span>
+                        <span class="msg-status">${getDeliveryBadge(log.delivery_status || log.status, log.error_message)}</span>
                     </div>
                     <div class="msg-time">${log.sent_at || '--'} &bull; ${escapeHtml(log.operator_name || 'system')}</div>
                     ${log.error_message ? `<small class="text-danger">${escapeHtml(log.error_message)}</small>` : ''}
@@ -665,10 +681,15 @@ async function refreshDeliveryStatuses() {
             let updated = false;
             for (const record of state.records) {
                 const statusInfo = data.statuses[record.id];
-                if (statusInfo && statusInfo.delivery_status !== record.delivery_status) {
-                    record.delivery_status = statusInfo.delivery_status;
-                    record.last_sent_at = statusInfo.sent_at;
-                    updated = true;
+                if (statusInfo) {
+                    const nextError = statusInfo.error_message || '';
+                    const currentError = record.delivery_error_message || record.error_message || '';
+                    if (statusInfo.delivery_status !== record.delivery_status || nextError !== currentError) {
+                        record.delivery_status = statusInfo.delivery_status;
+                        record.delivery_error_message = nextError;
+                        record.last_sent_at = statusInfo.sent_at;
+                        updated = true;
+                    }
                 }
             }
             if (updated) renderTable(state.records);
@@ -973,6 +994,10 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeAttr(text) {
+    return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function debounce(func, wait) {

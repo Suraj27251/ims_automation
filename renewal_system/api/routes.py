@@ -103,7 +103,10 @@ def get_renewals():
                     ORDER BY sent_at DESC LIMIT 1) as last_template_sent,
                    (SELECT COALESCE(delivery_status, status) FROM whatsapp_campaign_logs wcl
                     WHERE wcl.renewal_id = r.id
-                    ORDER BY sent_at DESC LIMIT 1) as delivery_status
+                    ORDER BY sent_at DESC LIMIT 1) as delivery_status,
+                   (SELECT error_message FROM whatsapp_campaign_logs wcl
+                    WHERE wcl.renewal_id = r.id
+                    ORDER BY sent_at DESC LIMIT 1) as delivery_error_message
             FROM renewal_records r
             WHERE {where_clause}
             ORDER BY r.{sort_by} {sort_dir}
