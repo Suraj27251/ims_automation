@@ -1,0 +1,189 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<!-- begin::Head -->
+<head>
+    <style type="text/css">
+        @font-face {
+            font-family: 'Poppins';
+            src: url('/Content/Poppins/Poppins-Medium.ttf') format("truetype"); /* Make sure your file location is right */
+        }
+
+        .classname {
+            font-family: Poppins
+        }
+    </style>
+    <meta charset="utf-8" />
+    <title>Admin | Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no">
+    <!--begin::Global Theme Styles -->
+    <link href="/Content/assets/vendors/base/vendors.bundle.min.css" rel="stylesheet"/>
+
+    <link href="/Content/assets/demo/default/base/style.bundle.min.css" rel="stylesheet"/>
+
+    <script src="/Scripts/jquery-3.3.1.js"></script>
+
+    <!--end::Global Theme Styles -->
+    <script>
+        function preventBack() { window.history.forward(); }
+        setTimeout("preventBack()", 10);
+        window.onunload = function () { null };
+        document.onkeydown = function (e) {
+            if (e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) {
+                return false;
+            }
+            if (e.ctrlKey && e.shiftKey && e.keyCode == 'J'.charCodeAt(0)) {
+                return false;
+            }
+            if (e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) {
+                return false;
+            }
+        }
+    </script>
+</head>
+
+<!-- end::Head -->
+<!-- begin::Body -->
+<body oncontextmenu="return false;" class="m--skin- m-header--fixed m-header--fixed-mobile m-aside-left--enabled m-aside-left--skin-dark m-aside-left--fixed m-aside-left--offcanvas m-footer--push m-aside--offcanvas-default">
+    <!-- begin::Page loader -->
+    <div class="m-page-loader m-page-loader--base">
+        <div class="m-blockui">
+            <span>Please wait...</span>
+            <span><div class="m-loader m-loader--brand"></div></span>
+        </div>
+    </div>
+    <!-- end::Page Loader -->
+    <!-- begin:: Page -->
+    <div class="m-grid m-grid--hor m-grid--root m-page">
+        <div class="m-grid__item m-grid__item--fluid m-grid m-grid--ver-desktop m-grid--desktop m-grid--tablet-and-mobile m-grid--hor-tablet-and-mobile m-login m-login--1 m-login--signin" id="m_login">
+            <div class="m-grid__item m-grid__item--order-tablet-and-mobile-2 m-login__aside">
+                <div class="m-stack m-stack--hor m-stack--desktop">
+                    <div class="m-stack__item m-stack__item--fluid">
+                        <div class="m-login__wrapper">
+                            <div class="m-login__logo">
+                                <img src="\..\Images\Logo1.png" width="25%" height="20%" />
+                            </div>
+                            <div class="m-login__signin">
+                                <div class="m-login__head">
+                                    <h3 class="m-login__title">Sign In To Admin</h3>
+                                </div>
+                                <section id="loginForm">
+<form action="/Admin" autocomplete="off" class="m-login__form m-form" id="frm" method="post"><input name="__RequestVerificationToken" type="hidden" value="u6uIvklsP0e8-xag4FMaq65w7IfjBIm3oSsxOUS2lKnoc9G1jhZ63zzbYsHIcBvI6qsiiGHtF228TT6kmodG-e85B7HZ0ZHjbAvyzjmHM50pEiUoC_yZJt7Wh19Tahty0" /><input id="ISPLogo" name="ISPLogo" type="hidden" value="\..\Images\Logo1.png" /><input id="FooterText" name="FooterText" type="hidden" value="XIMS By" /><input id="FooterText1" name="FooterText1" type="hidden" value="Xonware" /><input id="FooterUrl" name="FooterUrl" type="hidden" value="http://www.xonware.com/" /><input id="FromYear" name="FromYear" type="hidden" value="2026" /><input id="ToYear" name="ToYear" type="hidden" value="2027" /><input id="LogoHeight" name="LogoHeight" type="hidden" value="20%" /><input id="LogoWidth" name="LogoWidth" type="hidden" value="25%" /><input id="ISPShortNameForUserLayout" name="ISPShortNameForUserLayout" type="hidden" value="MarvellousFiber" /><input id="OnlineTopupML" name="OnlineTopupML" type="hidden" value="False" /><input id="DashboardLayout" name="DashboardLayout" type="hidden" value="light" /><input id="DashboardScroller" name="DashboardScroller" type="hidden" value="" /><input id="AutoStaticIPExpiry" name="AutoStaticIPExpiry" type="hidden" value="True" /><input data-val="true" data-val-number="The field LayoutDefaultDropDown must be a number." data-val-required="The LayoutDefaultDropDown field is required." id="LayoutDefaultDropDown" name="LayoutDefaultDropDown" type="hidden" value="1" />                                        <div style="text-align: center;">
+                                            <div style="color: red">
+                                                <span class="field-validation-valid" data-valmsg-for="" data-valmsg-replace="true"></span>
+                                            </div>
+                                        </div>
+                                        <div style="text-align: center;">
+                                            <div style="color: red">
+                                                
+                                            </div>
+                                        </div>
+                                        <div class="form-group m-form__group">
+                                            <input class="form-control m-input" data-val="true" data-val-required="Please Enter User Id." id="UserId" name="UserId" placeholder="UserId" required="required" type="text" value="" />
+                                            <span><span class="field-validation-valid text-danger" data-valmsg-for="UserId" data-valmsg-replace="true" style="font-size:13px"></span></span>
+                                        </div>
+                                        <div class="form-group m-form__group">
+                                            <input class="form-control m-input m-login__form-input--last" data-val="true" data-val-required="Please Enter Password." id="Password" name="Password" placeholder="Password" required="required" type="password" />
+                                            <span><span class="field-validation-valid text-danger" data-valmsg-for="Password" data-valmsg-replace="true" style="font-size:13px"></span></span>
+                                        </div>
+                                        <div class="row m-login__form-sub">
+                                            
+                                            <div class="col m--align-right">
+                                                <a href="javascript:;" id="m_login_forget_password" class="m-link">
+                                                    Forget Password ?
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div class="m-login__form-action">
+                                            <button type="submit" id="btnLogin" class="btn btn-focus m-btn m-btn--pill m-btn--custom m-btn--air ">
+                                                Sign In
+                                            </button>
+                                        </div>
+                                        <div class="m-login__form-action" style="color:black;margin-top:60px">
+                                            <h6>
+                                                2026-2027 &copy; XIMS By
+                                                <a href="http://www.xonware.com/" target="_blank" class="m-link">
+                                                    Xonware
+                                                </a>
+                                            </h6>
+                                        </div>
+</form>                                </section>
+                            </div>
+                            <div class="m-login__forget-password">
+                                <div class="m-login__head">
+                                    <h3 class="m-login__title">Forgotten Password ?</h3>
+                                    <div class="m-login__desc">Enter your email to reset your password:</div>
+                                </div>
+<form action="/Login/ForgotPassword" class="m-login__form m-form" method="post">                                    <div class="form-group m-form__group">
+                                        <input class="form-control m-input" id="UserIdForEmail" name="UserIdForEmail" placeholder="UserId" required="required" type="text" value="" />
+                                    </div>
+                                    <div class="form-group m-form__group">
+                                        <input class="form-control m-input" id="Email" name="Email" placeholder="Email" required="required" type="text" value="" />
+                                    </div>
+                                    <div class="m-login__form-action">
+                                        <button type="submit" class="btn btn-focus m-btn m-btn--pill m-btn--custom m-btn--air">
+                                            Request
+                                        </button>
+                                        <button id="m_login_forget_password_cancel" class="btn btn-outline-focus m-btn m-btn--pill m-btn--custom">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                    <div class="m-login__form-action" style="color:black;margin-top:60px">
+                                        <h6>
+                                            2026-2027 &copy; XIMS By
+                                            <a href="http://www.xonware.com/" target="_blank" class="m-link">
+                                                Xonware
+                                            </a>
+                                        </h6>
+                                    </div>
+</form>                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="m-grid__item m-grid__item--fluid m-grid m-grid--center m-grid--hor m-grid__item--order-tablet-and-mobile-2	m-login__content m-grid-item--center" style="background-image: url(Images/bg-4.jpg)">
+                <div class="m-grid__item">
+                    <h3 class="m-login__welcome"></h3>
+                    <p class="m-login__msg">
+
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- end:: Page -->
+    <!--begin::Global Theme Bundle -->
+    <script src="/Scripts/jquery.validate.min.js"></script>
+<script src="/Scripts/jquery.validate.unobtrusive.min.js"></script>
+<script src="/Content/assets/vendors/base/vendors.bundle.js"></script>
+<script src="/Content/assets/demo/default/base/scripts.bundle.js"></script>
+<script src="/Content/assets/vendors/custom/datatables/datatables.bundle.js"></script>
+
+
+    <!--end::Global Theme Bundle -->
+    <!-- begin::Page Loader -->
+    <script>
+        $(window).on('load', function () {
+            $('body').removeClass('m-page--loading');
+        });
+        $('.pageLoad').click(function () {
+            $('body').addClass('m-page--loading');
+        })
+        $("#m_login_forget_password").click(function () {
+            var s = $("#m_login");
+            s.removeClass("m-login--signin");
+            s.addClass("m-login--forget-password");
+        })
+
+        $("#m_login_forget_password_cancel").click(function () {
+            var s = $("#m_login");
+            s.removeClass("m-login--forget-password");
+            s.addClass("m-login--signin");
+
+        })
+    </script>
+    <!-- end::Page Loader -->
+</body>
+<!-- end::Body -->
+</html>
