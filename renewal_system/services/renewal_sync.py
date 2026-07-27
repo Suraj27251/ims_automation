@@ -1,35 +1,37 @@
 """Renewal data sync service.
 
-Syncs data from the existing IMS fetcher (renewals table) into
+Syncs data from the IMS fetcher (renewals table) into
 the renewal_records table used by the campaign system.
 
-This bridges the existing cron fetcher with the new campaign dashboard.
+The renewals table is a snapshot of the latest IMS Upcoming Renewal fetch.
+It is cleared and repopulated on each fetch, so it only contains the
+current batch of records.
 
 Strategy:
-- Sync the latest record per user from the renewals table.
+- Sync records from the latest IMS fetch batch (renewals table).
 - Cross-reference with customers table to check active status.
 - If a customer is Active and their expiry is in the future (in customers table),
   they have renewed — skip showing them as expired.
 - Classify each record as expired/today/upcoming based on today's date.
-- Remove very old records (expired more than 7 days) to keep dashboard clean.
-- Preserve recently expired records so operators can still see/contact them.
+- Remove stale renewal_records that are not in the current fetch batch,
+  so the dashboard matches the IMS Upcoming Renewal report exactly.
 """
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 logger = logging.getLogger(__name__)
 
-# How many days to keep expired records visible on the dashboard
-EXPIRED_RETENTION_DAYS = 7
-
 
 def sync_from_renewals_table(config):
-    """Sync records from the existing 'renewals' table to 'renewal_records'.
+    """Sync records from the 'renewals' table to 'renewal_records'.
 
-    Uses the latest expiry date per user from the renewals table.
+    The renewals table now contains only the latest IMS fetch batch
+    (snapshot approach). This function syncs those records into the
+    campaign dashboard table.
+
     Cross-references with customers table to filter out renewed (Active) users.
-    Removes records that expired more than EXPIRED_RETENTION_DAYS ago.
+    Cleans up stale renewal_records not in the current batch.
 
     Args:
         config: Application config with DB credentials.
@@ -41,25 +43,19 @@ def sync_from_renewals_table(config):
     from renewal_system.services.classifier import classify_customer
 
     today = date.today()
-    cutoff_date = today - timedelta(days=EXPIRED_RETENTION_DAYS)
     stats = {"inserted": 0, "updated": 0, "removed": 0, "skipped_active": 0, "total": 0}
 
     with get_db_cursor(config) as cursor:
-        # Fetch the latest record per user_id from the renewals table.
-        # Uses MAX(plan_expiry_date) to get the most recent plan per user.
+        # Fetch all records from the renewals table (latest IMS fetch batch only).
         cursor.execute("""
             SELECT r.user_id, r.cust_name, r.mobile_no, r.plan_name, r.amount,
                    r.plan_expiry_date, r.zone_name
             FROM renewals r
-            INNER JOIN (
-                SELECT user_id, MAX(plan_expiry_date) AS max_expiry
-                FROM renewals
-                WHERE plan_expiry_date IS NOT NULL
-                GROUP BY user_id
-            ) latest ON r.user_id = latest.user_id AND r.plan_expiry_date = latest.max_expiry
+            WHERE r.plan_expiry_date IS NOT NULL
         """)
         source_records = cursor.fetchall()
         stats["total"] = len(source_records)
+        logger.info("Processing %d records from latest IMS fetch", stats["total"])
 
         # Build a lookup of active customers from the customers table
         # These are users who have renewed (status=1 means Active, 0 means Inactive)
@@ -76,6 +72,9 @@ def sync_from_renewals_table(config):
             # customers table might not exist yet - that's fine, skip the check
             logger.debug("Could not query customers table: %s", e)
 
+        # Track which user_ids are in the current batch
+        current_user_ids = set()
+
         for record in source_records:
             expiry_date = record["plan_expiry_date"]
             if isinstance(expiry_date, datetime):
@@ -85,6 +84,8 @@ def sync_from_renewals_table(config):
 
             # Check if this user is Active in the customers table with a newer expiry
             user_id = record["user_id"]
+            current_user_ids.add(user_id)
+
             if user_id in active_customers:
                 cust = active_customers[user_id]
                 cust_expiry = cust["expiry_date"]
@@ -148,14 +149,21 @@ def sync_from_renewals_table(config):
             elif cursor.rowcount == 2:
                 stats["updated"] += 1
 
-        # Remove records that expired more than 7 days ago (no longer actionable)
-        cursor.execute(
-            "DELETE FROM renewal_records WHERE expiry_date < %s",
-            (cutoff_date,)
-        )
+        # Remove stale renewal_records not in the current IMS fetch batch.
+        # This ensures the dashboard matches the IMS report exactly.
+        if current_user_ids:
+            placeholders = ",".join(["%s"] * len(current_user_ids))
+            cursor.execute(
+                f"DELETE FROM renewal_records WHERE account_id NOT IN ({placeholders})",
+                list(current_user_ids)
+            )
+        else:
+            # No records in current batch — clear everything
+            cursor.execute("DELETE FROM renewal_records")
+
         stats["removed"] = cursor.rowcount
         if stats["removed"] > 0:
-            logger.info("Removed %d records expired before %s", stats["removed"], cutoff_date)
+            logger.info("Removed %d stale records not in current IMS fetch", stats["removed"])
 
     logger.info("Sync complete: %d inserted, %d updated, %d removed, %d skipped (active) of %d total",
                 stats["inserted"], stats["updated"], stats["removed"],

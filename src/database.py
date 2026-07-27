@@ -107,10 +107,13 @@ class Database:
             ) from e
 
     def save_records(self, records: list) -> int:
-        """Insert renewal records into the database.
+        """Insert renewal records into the database using snapshot approach.
 
-        Uses INSERT IGNORE to skip records that already exist
-        (based on user_id + plan_expiry_date unique key).
+        Clears existing data first, then inserts the new batch.
+        This ensures the renewals table always reflects the latest IMS fetch,
+        so the dashboard matches the IMS Upcoming Renewal report exactly.
+
+        The DELETE is rolled back if the INSERT fails, preserving data integrity.
 
         Args:
             records: List of RenewalRecord objects.
@@ -130,8 +133,15 @@ class Database:
 
         try:
             cursor = self._connection.cursor()
-            inserted = 0
 
+            # Clear existing data (snapshot approach)
+            # DELETE is transactional and can be rolled back, unlike TRUNCATE
+            cursor.execute("DELETE FROM renewals")
+            deleted_count = cursor.rowcount
+            logger.info("Cleared %d old records from renewals table", deleted_count)
+
+            # Insert new records
+            inserted = 0
             for record in records:
                 expiry_date = None
                 if record.plan_expiry_date is not None:
@@ -149,12 +159,13 @@ class Database:
                 inserted += cursor.rowcount
 
             self._connection.commit()
-            logger.info("Database: %d new records inserted (of %d total)", inserted, len(records))
+            logger.info("Snapshot save: %d deleted, %d inserted (of %d total)",
+                        deleted_count, inserted, len(records))
             return inserted
 
         except Exception as e:
             self._connection.rollback()
-            raise DatabaseError(f"Failed to insert records: {e}") from e
+            raise DatabaseError(f"Failed to save records: {e}") from e
 
     def close(self) -> None:
         """Close database connection."""
